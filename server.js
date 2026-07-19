@@ -180,7 +180,10 @@ app.get('/api/channel', async (req, res) => {
 
 /**
  * GET /api/channel-videos?id=CHANNEL_ID&pageToken=...
- * Liste des vidéos d'une chaîne (via search, triées par date)
+ * Liste des vidéos d'une chaîne, triées par date d'ajout.
+ * On utilise la playlist "uploads" de la chaîne (via playlistItems.list) plutôt que
+ * search.list?channelId=..., car ce dernier est connu pour être peu fiable
+ * (retard d'indexation, résultats partiels/incomplets).
  */
 app.get('/api/channel-videos', async (req, res) => {
     const apiKey = getApiKey(res);
@@ -190,26 +193,44 @@ app.get('/api/channel-videos', async (req, res) => {
     if (!id) return res.status(400).json({ error: "Le paramètre 'id' est manquant." });
 
     try {
+        // 1. Récupère l'ID de la playlist "uploads" de la chaîne
+        const channelData = await fetchJSON(
+            `${API_BASE}/channels?part=contentDetails&id=${encodeURIComponent(id)}&key=${apiKey}`
+        );
+        const channel = channelData.items && channelData.items[0];
+        if (!channel) {
+            return res.json({ items: [] });
+        }
+        const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
+
+        // 2. Liste les vidéos de cette playlist (fiable et paginée correctement)
         const params = new URLSearchParams({
             part: 'snippet',
-            channelId: id,
-            type: 'video',
-            order: 'date',
+            playlistId: uploadsPlaylistId,
             maxResults: '12',
             key: apiKey
         });
         if (pageToken) params.set('pageToken', pageToken);
 
-        const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
+        const playlistData = await fetchJSON(`${API_BASE}/playlistItems?${params.toString()}`);
 
-        const videoIds = data.items.map(item => item.id.videoId).filter(Boolean);
+        // Reformate chaque item au même format que search.list pour que le frontend n'ait rien à changer
+        const items = playlistData.items
+            .filter(item => item.snippet.resourceId && item.snippet.resourceId.videoId)
+            .map(item => ({
+                id: { videoId: item.snippet.resourceId.videoId },
+                snippet: item.snippet
+            }));
+
+        // 3. Récupère les stats/durée pour chaque vidéo
+        const videoIds = items.map(item => item.id.videoId);
         if (videoIds.length > 0) {
             const statsData = await fetchJSON(
                 `${API_BASE}/videos?part=statistics,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`
             );
             const statsMap = {};
             statsData.items.forEach(v => { statsMap[v.id] = v; });
-            data.items.forEach(item => {
+            items.forEach(item => {
                 const extra = statsMap[item.id.videoId];
                 if (extra) {
                     item.statistics = extra.statistics;
@@ -218,7 +239,11 @@ app.get('/api/channel-videos', async (req, res) => {
             });
         }
 
-        res.json(data);
+        res.json({
+            items,
+            nextPageToken: playlistData.nextPageToken || null,
+            prevPageToken: playlistData.prevPageToken || null
+        });
     } catch (error) {
         res.status(500).json({ error: "Erreur lors de la récupération des vidéos de la chaîne.", details: error.message });
     }
