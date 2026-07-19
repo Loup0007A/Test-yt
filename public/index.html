@@ -2,7 +2,9 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Recherche Vidéo YouTube</title>
     <style>
         :root {
@@ -17,15 +19,24 @@
 
         * { box-sizing: border-box; }
 
+        html {
+            -webkit-text-size-adjust: 100%;
+        }
+
         body {
             font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
             padding: 20px;
+            padding-top: max(20px, env(safe-area-inset-top));
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
+            padding-left: max(20px, env(safe-area-inset-left));
+            padding-right: max(20px, env(safe-area-inset-right));
             display: flex;
             flex-direction: column;
             align-items: center;
+            -webkit-tap-highlight-color: transparent;
         }
 
         h1 {
@@ -487,12 +498,93 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        @media (max-width: 600px) {
-            .video-result { flex-direction: column; }
-            .video-result img, .thumb-wrapper { width: 100%; }
-            .thumb-wrapper img { width: 100%; }
+        /* ---------- Tablettes / petits écrans ---------- */
+        @media (max-width: 700px) {
+            body { padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); }
+            h1 { font-size: 1.5rem; }
+
+            #filters {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                justify-content: flex-start;
+                padding-bottom: 4px;
+                scrollbar-width: none;
+            }
+            #filters::-webkit-scrollbar { display: none; }
+            #filters select { flex-shrink: 0; }
+
             #player-layout { flex-direction: column; }
-            .related-item img { width: 120px; }
+            #video-sidebar { width: 100%; }
+        }
+
+        /* ---------- Téléphones (iPhone et Android) ---------- */
+        @media (max-width: 480px) {
+            body { padding: 10px; padding-top: max(10px, env(safe-area-inset-top)); }
+
+            h1 { font-size: 1.35rem; margin-bottom: 14px; }
+
+            .search-bar { border-radius: 24px; }
+            input { padding: 12px 18px; font-size: 16px; } /* 16px empêche le zoom auto sur iOS */
+            .search-btn { padding: 0 18px; font-size: 0.95rem; }
+
+            #filters select { font-size: 0.8rem; padding: 8px 12px; }
+
+            #results, #load-more-wrapper { max-width: 100%; }
+
+            .video-result, .channel-result {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px 6px;
+            }
+            .video-result img, .thumb-wrapper, .thumb-wrapper img {
+                width: 100%;
+            }
+            .channel-result { align-items: center; text-align: center; }
+            .channel-result img { width: 76px; height: 76px; }
+            .video-channel { width: auto; }
+
+            .video-title, .channel-title { font-size: 1rem; line-height: 1.3rem; }
+            .video-desc { font-size: 0.8rem; }
+
+            .voir-plus-btn { width: 100%; padding: 12px; }
+
+            #player-zone { max-width: 100%; }
+            #player-layout { gap: 16px; }
+            #video-main, #video-sidebar { min-width: 0; width: 100%; }
+
+            #video-details h2, #video-title-el { font-size: 1.1rem; }
+            .video-stats-row { gap: 10px; font-size: 0.82rem; }
+
+            #video-channel-block { flex-wrap: wrap; }
+
+            .related-item { padding: 4px; }
+            .related-item img { width: 110px; }
+            .related-title { font-size: 0.82rem; }
+
+            #channel-header {
+                flex-direction: column;
+                text-align: center;
+                gap: 10px;
+            }
+            #channel-header .channel-header-desc { max-width: 100%; }
+
+            .back-btn {
+                width: 100%;
+                justify-content: center;
+                padding: 12px 20px;
+            }
+
+            .comment-item { gap: 8px; }
+            .comment-item img { width: 30px; height: 30px; }
+            .comment-text { font-size: 0.84rem; }
+        }
+
+        /* ---------- Très petits iPhone (SE, mini) ---------- */
+        @media (max-width: 375px) {
+            h1 { font-size: 1.2rem; }
+            .video-title, .channel-title { font-size: 0.95rem; }
+            .thumb-wrapper .duration-tag { font-size: 0.65rem; }
         }
     </style>
 </head>
@@ -725,7 +817,7 @@
             const title = item.snippet.title;
             const description = item.snippet.description || 'Aucune description.';
             const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
-            const subs = item.statistics && !item.statistics.hiddenSubscriberCount ? formatNumber(item.statistics.subscriberCount) + ' abonnés' : 'Nombre d\\'abonnés masqué';
+            const subs = item.statistics && !item.statistics.hiddenSubscriberCount ? formatNumber(item.statistics.subscriberCount) + ' abonnés' : "Nombre d'abonnés masqué";
 
             const el = document.createElement('div');
             el.className = 'channel-result';
