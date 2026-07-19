@@ -706,10 +706,18 @@
             return `${m}:${pad(s)}`;
         }
 
+        function decodeHtmlEntities(str) {
+            if (!str) return '';
+            const txt = document.createElement('textarea');
+            txt.innerHTML = str;
+            return txt.value;
+        }
+
         function escapeHtml(str) {
             if (!str) return '';
+            const decoded = decodeHtmlEntities(str);
             const div = document.createElement('div');
-            div.textContent = str;
+            div.textContent = decoded;
             return div.innerHTML;
         }
 
@@ -866,7 +874,7 @@
                     return;
                 }
 
-                document.getElementById('video-title-el').textContent = video.snippet.title;
+                document.getElementById('video-title-el').textContent = decodeHtmlEntities(video.snippet.title);
 
                 const stats = video.statistics || {};
                 document.getElementById('video-stats-row').innerHTML = `
@@ -876,10 +884,10 @@
                     <span class="stat">📅 ${formatDate(video.snippet.publishedAt)}</span>
                 `;
 
-                document.getElementById('video-description').textContent = video.snippet.description || 'Aucune description.';
+                document.getElementById('video-description').textContent = decodeHtmlEntities(video.snippet.description) || 'Aucune description.';
 
                 const channelBlock = document.getElementById('video-channel-block');
-                document.getElementById('video-channel-name').textContent = video.snippet.channelTitle;
+                document.getElementById('video-channel-name').textContent = decodeHtmlEntities(video.snippet.channelTitle);
                 channelBlock.onclick = () => openChannel(video.snippet.channelId);
 
                 // Récupère l'avatar + abonnés de la chaîne
