@@ -40,7 +40,6 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            transition: opacity 0.3s ease;
         }
 
         .search-bar {
@@ -147,7 +146,7 @@
 
         /* Vue Lecteur (Cachée par défaut) */
         #player-zone {
-            display: none;
+            display: none; /* Changé dynamiquement en JS */
             width: 100%;
             max-width: 900px;
             flex-direction: column;
@@ -173,9 +172,13 @@
             background-color: var(--yt-red-hover);
         }
 
+        #video-container {
+            width: 100%;
+        }
+
         .video-wrapper {
             position: relative;
-            padding-bottom: 56.25%;
+            padding-bottom: 56.25%; /* Ratio 16:9 obligatoire */
             height: 0;
             width: 100%;
             border-radius: 16px;
@@ -251,7 +254,6 @@
             resultsContainer.innerHTML = "<p class='status-msg'>Recherche en cours...</p>";
 
             try {
-                // On appelle notre propre serveur Node.js au lieu de Google en direct
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const data = await response.json();
 
@@ -260,6 +262,9 @@
                     
                     data.items.forEach(item => {
                         const videoId = item.id.videoId;
+                        // Si l'élément n'a pas de videoId (ex: une chaîne ou playlist), on l'ignore
+                        if (!videoId) return;
+
                         const title = item.snippet.title;
                         const channelTitle = item.snippet.channelTitle;
                         const description = item.snippet.description || "Aucune description.";
@@ -288,11 +293,11 @@
         }
 
         function loadVideo(videoId) {
-            // Étape 1 : Masquer complètement la recherche et afficher le lecteur
+            // Étape 1 : Masquer proprement la recherche et afficher le bloc du joueur
             document.getElementById('search-zone').style.display = 'none';
             document.getElementById('player-zone').style.display = 'flex';
 
-            // Étape 2 : Injecter l'iframe
+            // Étape 2 : Injecter l'iframe à l'intérieur du wrapper responsive
             const videoContainer = document.getElementById('video-container');
             videoContainer.innerHTML = `
                 <div class="video-wrapper">
@@ -303,14 +308,18 @@
                     </iframe>
                 </div>
             `;
+            
+            // Remonte l'écran en haut de page pour le confort visuel
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function closeVideo() {
-            // Réinitialise l'affichage pour revenir en arrière
+            // Étape 1 : Cacher le lecteur et vider l'iframe pour stopper net le son
             document.getElementById('player-zone').style.display = 'none';
-            document.getElementById('video-container').innerHTML = ''; // Coupe le son de la vidéo en détruisant l'iframe
-            document.getElementById('search-zone').style.style.display = 'flex';
+            document.getElementById('video-container').innerHTML = ''; 
+
+            // Étape 2 : Réafficher la zone de recherche (Correction de la coquille ici)
+            document.getElementById('search-zone').style.display = 'flex';
         }
     </script>
 </body>
