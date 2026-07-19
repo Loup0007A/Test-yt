@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lecteur YouTube Mobile</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 30px;
+            background-color: #f9f9f9;
+            padding: 10px;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+        input {
+            padding: 10px;
+            width: 80%;
+            max-width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 16px;
+            background-color: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        #video-container {
+            margin-top: 20px;
+        }
+        #ytplayer {
+            display: none;
+            width: 100%;
+            max-width: 640px;
+            height: 360px;
+            border: none;
+        }
+        #error-message {
+            color: #ff0000;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Lecteur YouTube</h1>
+    <p>Entrez l'ID de la vidéo :</p>
+    
+    <div class="search-container">
+        <input type="text" id="video-id" placeholder="Ex: y6120Q5xk0E">
+        <br>
+        <button onclick="loadVideo()">Charger la vidéo</button>
+    </div>
+
+    <div id="error-message"></div>
+
+    <div id="video-container">
+        <iframe id="ytplayer" src="" allowfullscreen></iframe>
+    </div>
+
+    <script>
+        function loadVideo() {
+            const videoId = document.getElementById('video-id').value.trim();
+            const player = document.getElementById('ytplayer');
+            const errorDiv = document.getElementById('error-message');
+
+            const youtubeIdRegex = /^[a-zA-Z0-9_-]{11}$/;
+
+            if (youtubeIdRegex.test(videoId)) {
+                errorDiv.textContent = "";
+                
+                // URL ultra-simplifiée sans paramètres complexes d'origine qui font planter l'ancien Safari
+                player.src = "https://www.youtube.com/embed/" + videoId;
+                player.style.display = "inline-block";
+            } else {
+                player.style.display = "none";
+                player.src = "";
+                errorDiv.textContent = "Veuillez entrer un ID valide (11 caractères).";
+            }
+        }
+    </script>
+</body>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/yV-5P4YAyQk?si=DG6Tker0GNhwqvnU" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</html>
