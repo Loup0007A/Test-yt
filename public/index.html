@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recherche YouTube Premium</title>
+    <title>Recherche Vidéo YouTube</title>
     <style>
-        /* Variables de design (Style YouTube Dark) */
         :root {
-            --bg-color: #0f0f0f;
-            --card-bg: #212121;
-            --text-color: #f1f1f1;
-            --text-secondary: #aaa;
+            --bg-color: #ffffff;
+            --text-color: #0f0f0f;
+            --text-secondary: #606060;
             --yt-red: #ff0000;
             --yt-red-hover: #cc0000;
-            --input-bg: #121212;
-            --border-color: #303030;
+            --border-light: #e5e5e5;
+            --bg-search: #f8f8f8;
         }
 
         body {
@@ -29,25 +27,34 @@
         }
 
         h1 {
-            font-size: 2rem;
-            margin-bottom: 5px;
+            font-size: 1.8rem;
+            color: var(--yt-red);
             font-weight: 700;
+            margin-bottom: 20px;
         }
 
-        .search-container {
+        /* Zone de recherche globale */
+        #search-zone {
+            width: 100%;
+            max-width: 700px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: opacity 0.3s ease;
+        }
+
+        .search-bar {
             display: flex;
             width: 100%;
-            max-width: 600px;
-            margin: 20px 0 30px 0;
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--border-light);
             border-radius: 40px;
             overflow: hidden;
-            background-color: var(--input-bg);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
         }
 
         input {
             flex: 1;
-            padding: 12px 20px;
+            padding: 14px 24px;
             background: transparent;
             border: none;
             color: var(--text-color);
@@ -55,35 +62,125 @@
             outline: none;
         }
 
-        button {
-            padding: 0 24px;
-            background-color: var(--border-color);
+        .search-btn {
+            padding: 0 28px;
+            background-color: var(--bg-search);
             color: var(--text-color);
             border: none;
+            border-left: 1px solid var(--border-light);
             cursor: pointer;
             font-size: 1rem;
             transition: background 0.2s;
-            border-left: 1px solid var(--border-color);
         }
 
-        button:hover {
-            background-color: #3f3f3f;
+        .search-btn:hover {
+            background-color: #ededed;
         }
 
-        /* Conteneur Lecteur Vidéo dynamique */
-        #video-container {
+        /* Résultats de recherche style "Liste YouTube officielle" */
+        #results {
             width: 100%;
-            max-width: 800px;
-            margin-bottom: 30px;
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .video-result {
+            display: flex;
+            gap: 16px;
+            padding: 12px;
+            border-bottom: 1px solid var(--border-light);
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            border-radius: 8px;
+        }
+
+        .video-result:hover {
+            background-color: #fafafa;
+            transform: translateY(-2px);
+        }
+
+        .video-result img {
+            width: 240px;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            border-radius: 8px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .video-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding-top: 4px;
+        }
+
+        .video-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-color);
+            line-height: 1.4rem;
+            margin-bottom: 6px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .video-channel {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .video-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Vue Lecteur (Cachée par défaut) */
+        #player-zone {
+            display: none;
+            width: 100%;
+            max-width: 900px;
+            flex-direction: column;
+            align-items: flex-start;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: var(--yt-red);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-bottom: 20px;
+            transition: background 0.2s;
+        }
+
+        .back-btn:hover {
+            background-color: var(--yt-red-hover);
         }
 
         .video-wrapper {
             position: relative;
-            padding-bottom: 56.25%; /* Ratio 16:9 */
+            padding-bottom: 56.25%;
             height: 0;
-            border-radius: 12px;
+            width: 100%;
+            border-radius: 16px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
             background: #000;
         }
 
@@ -96,85 +193,48 @@
             border: none;
         }
 
-        /* Grille de résultats */
-        #results {
-            width: 100%;
-            max-width: 1000px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 20px;
-            padding: 10px;
-        }
-
-        .video-result {
-            background-color: transparent;
-            border-radius: 10px;
-            overflow: hidden;
-            cursor: pointer;
-            transition: transform 0.2s, background 0.2s;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .video-result:hover {
-            transform: scale(1.03);
-        }
-
-        .video-result img {
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            object-fit: cover;
-            border-radius: 10px;
-            background-color: #000;
-        }
-
-        .video-info {
-            padding: 10px 5px;
-        }
-
-        .video-title {
-            font-size: 0.95rem;
-            font-weight: 500;
-            line-height: 1.3rem;
-            display: -webkit-box;
-            -webkit-line-clamp: 2; /* Coupe le texte après 2 lignes */
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            margin-bottom: 4px;
-        }
-
-        .video-channel {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-
         .status-msg {
-            grid-column: 1 / -1;
             text-align: center;
             color: var(--text-secondary);
             font-style: italic;
+            margin-top: 20px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Adaptations Mobiles */
+        @media (max-width: 600px) {
+            .video-result {
+                flex-direction: column;
+            }
+            .video-result img {
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
 
-    <h1>Rechercher sur YouTube</h1>
-    
-    <div class="search-container">
-        <input type="text" id="video-query" placeholder="Entrez le nom de la vidéo...">
-        <button onclick="searchVideo()">Rechercher</button>
+    <!-- ZONE DE RECHERCHE -->
+    <div id="search-zone">
+        <h1>Rechercher une vidéo</h1>
+        <div class="search-bar">
+            <input type="text" id="video-query" placeholder="Saisissez votre recherche...">
+            <button class="search-btn" onclick="searchVideo()">Rechercher</button>
+        </div>
+        <div id="results"></div>
     </div>
 
-    <!-- Le lecteur s'affiche ici tout en haut quand on clique sur une vidéo -->
-    <div id="video-container"></div>
-
-    <!-- Les résultats s'affichent sous forme de jolies cartes miniatures -->
-    <div id="results"></div>
+    <!-- ZONE LECTEUR (Masquée au début) -->
+    <div id="player-zone">
+        <button class="back-btn" onclick="closeVideo()">← Retour à la recherche</button>
+        <div id="video-container"></div>
+    </div>
 
     <script>
-        const API_KEY = "AIzaSyCGjzaB5AeXvH5Xbx4QCiZsImKsmXGxu2M"; // Met ta clé API ici
-
-        // Permet de lancer la recherche en appuyant sur la touche "Entrée"
         document.getElementById('video-query').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') searchVideo();
         });
@@ -184,27 +244,25 @@
             const resultsContainer = document.getElementById('results');
 
             if (!query) {
-                resultsContainer.innerHTML = "<p class='status-msg'>Veuillez entrer un mot-clé.</p>";
+                resultsContainer.innerHTML = "<p class='status-msg'>Veuillez saisir un mot-clé.</p>";
                 return;
             }
 
             resultsContainer.innerHTML = "<p class='status-msg'>Recherche en cours...</p>";
 
             try {
-                // Utilisation de la miniature moyenne (medium) pour une meilleure qualité visuelle
-                const response = await fetch(
-                    `https://www.googleapis.com/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=8&key=${API_KEY}`
-                );
+                // On appelle notre propre serveur Node.js au lieu de Google en direct
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const data = await response.json();
 
                 if (data.items && data.items.length > 0) {
-                    resultsContainer.innerHTML = ""; // On nettoie les anciens résultats
+                    resultsContainer.innerHTML = "";
                     
                     data.items.forEach(item => {
                         const videoId = item.id.videoId;
                         const title = item.snippet.title;
                         const channelTitle = item.snippet.channelTitle;
-                        // On prend l'image 'medium' pour éviter que ce soit flou
+                        const description = item.snippet.description || "Aucune description.";
                         const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
 
                         const resultElement = document.createElement('div');
@@ -214,15 +272,11 @@
                             <div class="video-info">
                                 <div class="video-title" title="${title}">${title}</div>
                                 <div class="video-channel">${channelTitle}</div>
+                                <div class="video-desc">${description}</div>
                             </div>
                         `;
                         
-                        resultElement.onclick = () => {
-                            loadVideo(videoId);
-                            // Scroll automatique vers le lecteur pour une meilleure expérience
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                        };
-                        
+                        resultElement.onclick = () => loadVideo(videoId);
                         resultsContainer.appendChild(resultElement);
                     });
                 } else {
@@ -234,17 +288,29 @@
         }
 
         function loadVideo(videoId) {
+            // Étape 1 : Masquer complètement la recherche et afficher le lecteur
+            document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('player-zone').style.display = 'flex';
+
+            // Étape 2 : Injecter l'iframe
             const videoContainer = document.getElementById('video-container');
-            // Utilisation d'un wrapper responsive 16:9 moderne
             videoContainer.innerHTML = `
                 <div class="video-wrapper">
                     <iframe
                         src="https://www.youtube.com/embed/${videoId}?autoplay=1"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         allowfullscreen>
-                     iframe>
+                    </iframe>
                 </div>
             `;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function closeVideo() {
+            // Réinitialise l'affichage pour revenir en arrière
+            document.getElementById('player-zone').style.display = 'none';
+            document.getElementById('video-container').innerHTML = ''; // Coupe le son de la vidéo en détruisant l'iframe
+            document.getElementById('search-zone').style.style.display = 'flex';
         }
     </script>
 </body>
