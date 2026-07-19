@@ -15,6 +15,8 @@
             --bg-search: #f8f8f8;
         }
 
+        * { box-sizing: border-box; }
+
         body {
             font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
             background-color: var(--bg-color);
@@ -33,10 +35,12 @@
             margin-bottom: 20px;
         }
 
+        h1.small-title { font-size: 1.3rem; }
+
         /* Zone de recherche globale */
         #search-zone {
             width: 100%;
-            max-width: 700px;
+            max-width: 900px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -45,6 +49,7 @@
         .search-bar {
             display: flex;
             width: 100%;
+            max-width: 700px;
             border: 1px solid var(--border-light);
             border-radius: 40px;
             overflow: hidden;
@@ -76,16 +81,39 @@
             background-color: #ededed;
         }
 
-        /* Résultats de recherche style "Liste YouTube officielle" */
+        /* Barre de filtres */
+        #filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 16px;
+            width: 100%;
+            max-width: 700px;
+        }
+
+        #filters select {
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border-light);
+            background-color: var(--bg-search);
+            color: var(--text-color);
+            font-size: 0.85rem;
+            cursor: pointer;
+            outline: none;
+        }
+
+        /* Résultats de recherche */
         #results {
             width: 100%;
+            max-width: 900px;
             margin-top: 30px;
             display: flex;
             flex-direction: column;
             gap: 16px;
         }
 
-        .video-result {
+        .video-result, .channel-result {
             display: flex;
             gap: 16px;
             padding: 12px;
@@ -95,7 +123,7 @@
             border-radius: 8px;
         }
 
-        .video-result:hover {
+        .video-result:hover, .channel-result:hover, .related-item:hover {
             background-color: #fafafa;
             transform: translateY(-2px);
         }
@@ -109,14 +137,42 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
-        .video-info {
+        .duration-badge {
+            position: relative;
+        }
+        .thumb-wrapper {
+            position: relative;
+            flex-shrink: 0;
+        }
+        .thumb-wrapper .duration-tag {
+            position: absolute;
+            bottom: 6px;
+            right: 6px;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            font-size: 0.72rem;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .channel-result img {
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .video-info, .channel-info {
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
             padding-top: 4px;
+            min-width: 0;
         }
 
-        .video-title {
+        .video-title, .channel-title {
             font-size: 1.15rem;
             font-weight: 600;
             color: var(--text-color);
@@ -132,6 +188,15 @@
             font-size: 0.9rem;
             color: var(--text-secondary);
             font-weight: 500;
+            margin-bottom: 4px;
+            cursor: pointer;
+            width: fit-content;
+        }
+        .video-channel:hover { text-decoration: underline; }
+
+        .video-meta {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
             margin-bottom: 8px;
         }
 
@@ -144,11 +209,38 @@
             overflow: hidden;
         }
 
-        /* Vue Lecteur (Cachée par défaut) */
-        #player-zone {
-            display: none; /* Changé dynamiquement en JS */
+        .channel-sub {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        /* Bouton voir plus */
+        #load-more-wrapper {
             width: 100%;
             max-width: 900px;
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .voir-plus-btn {
+            padding: 10px 26px;
+            border-radius: 20px;
+            border: 1px solid var(--border-light);
+            background-color: var(--bg-search);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        .voir-plus-btn:hover { background-color: #ededed; }
+
+        /* Vue Lecteur */
+        #player-zone {
+            display: none;
+            width: 100%;
+            max-width: 1200px;
             flex-direction: column;
             align-items: flex-start;
             animation: fadeIn 0.4s ease;
@@ -172,13 +264,32 @@
             background-color: var(--yt-red-hover);
         }
 
-        #video-container {
+        #player-layout {
+            display: flex;
+            gap: 24px;
             width: 100%;
+            align-items: flex-start;
+            flex-wrap: wrap;
         }
+
+        #video-main {
+            flex: 2;
+            min-width: 320px;
+        }
+
+        #video-sidebar {
+            flex: 1;
+            min-width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        #video-container { width: 100%; }
 
         .video-wrapper {
             position: relative;
-            padding-bottom: 56.25%; /* Ratio 16:9 obligatoire */
+            padding-bottom: 56.25%;
             height: 0;
             width: 100%;
             border-radius: 16px;
@@ -196,6 +307,174 @@
             border: none;
         }
 
+        #video-details {
+            margin-top: 16px;
+        }
+
+        #video-details h2 {
+            font-size: 1.35rem;
+            margin: 0 0 8px 0;
+        }
+
+        .video-stats-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+        }
+
+        .video-stats-row .stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 600;
+        }
+
+        #video-channel-block {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            border-top: 1px solid var(--border-light);
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 12px;
+            cursor: pointer;
+        }
+        #video-channel-block img {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        #video-channel-block .ch-name { font-weight: 600; }
+        #video-channel-block .ch-subs { font-size: 0.82rem; color: var(--text-secondary); }
+
+        #video-description {
+            font-size: 0.9rem;
+            color: var(--text-color);
+            background: var(--bg-search);
+            padding: 12px;
+            border-radius: 10px;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+
+        /* Commentaires */
+        #comments-section h3 { font-size: 1.05rem; margin-bottom: 14px; }
+        .comment-item {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .comment-item img {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .comment-author {
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 2px;
+        }
+        .comment-date {
+            font-weight: 400;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            margin-left: 6px;
+        }
+        .comment-text {
+            font-size: 0.88rem;
+            color: var(--text-color);
+            line-height: 1.35;
+        }
+        .comment-likes {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Sidebar vidéos associées */
+        .related-item {
+            display: flex;
+            gap: 10px;
+            cursor: pointer;
+            border-radius: 8px;
+            padding: 6px;
+        }
+        .related-item img {
+            width: 160px;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+        .related-info { min-width: 0; }
+        .related-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            line-height: 1.25rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .related-channel {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .related-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        /* Vue Profil de chaîne */
+        #channel-zone {
+            display: none;
+            width: 100%;
+            max-width: 900px;
+            flex-direction: column;
+            animation: fadeIn 0.4s ease;
+        }
+
+        #channel-header {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 20px;
+        }
+
+        #channel-header img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        #channel-header h2 { margin: 0 0 6px 0; font-size: 1.5rem; }
+        #channel-header .channel-header-stats {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+        #channel-header .channel-header-desc {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            max-width: 600px;
+        }
+
+        #channel-videos {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
         .status-msg {
             text-align: center;
             color: var(--text-secondary);
@@ -208,14 +487,12 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Adaptations Mobiles */
         @media (max-width: 600px) {
-            .video-result {
-                flex-direction: column;
-            }
-            .video-result img {
-                width: 100%;
-            }
+            .video-result { flex-direction: column; }
+            .video-result img, .thumb-wrapper { width: 100%; }
+            .thumb-wrapper img { width: 100%; }
+            #player-layout { flex-direction: column; }
+            .related-item img { width: 120px; }
         }
     </style>
 </head>
@@ -223,83 +500,255 @@
 
     <!-- ZONE DE RECHERCHE -->
     <div id="search-zone">
-        <h1>Rechercher une vidéo</h1>
+        <h1>Rechercher</h1>
         <div class="search-bar">
-            <input type="text" id="video-query" placeholder="Saisissez votre recherche...">
-            <button class="search-btn" onclick="searchVideo()">Rechercher</button>
+            <input type="text" id="video-query" placeholder="Rechercher une vidéo ou une chaîne...">
+            <button class="search-btn" onclick="newSearch()">Rechercher</button>
         </div>
+
+        <div id="filters">
+            <select id="filter-type">
+                <option value="video">Vidéos</option>
+                <option value="channel">Chaînes</option>
+            </select>
+            <select id="filter-order">
+                <option value="relevance">Pertinence</option>
+                <option value="date">Date d'ajout</option>
+                <option value="viewCount">Nombre de vues</option>
+                <option value="rating">Note</option>
+                <option value="title">Titre</option>
+            </select>
+            <select id="filter-duration">
+                <option value="any">Durée : Toutes</option>
+                <option value="short">Courte (&lt; 4 min)</option>
+                <option value="medium">Moyenne (4-20 min)</option>
+                <option value="long">Longue (&gt; 20 min)</option>
+            </select>
+            <select id="filter-date">
+                <option value="any">Date : Toutes</option>
+                <option value="today">Aujourd'hui</option>
+                <option value="week">Cette semaine</option>
+                <option value="month">Ce mois-ci</option>
+                <option value="year">Cette année</option>
+            </select>
+        </div>
+
         <div id="results"></div>
+        <div id="load-more-wrapper"></div>
     </div>
 
-    <!-- ZONE LECTEUR (Masquée au début) -->
+    <!-- ZONE LECTEUR -->
     <div id="player-zone">
         <button class="back-btn" onclick="closeVideo()">← Retour à la recherche</button>
-        <div id="video-container"></div>
+        <div id="player-layout">
+            <div id="video-main">
+                <div id="video-container"></div>
+                <div id="video-details">
+                    <h2 id="video-title-el"></h2>
+                    <div class="video-stats-row" id="video-stats-row"></div>
+                    <div id="video-channel-block">
+                        <img id="video-channel-avatar" src="" alt="">
+                        <div>
+                            <div class="ch-name" id="video-channel-name"></div>
+                            <div class="ch-subs" id="video-channel-subs"></div>
+                        </div>
+                    </div>
+                    <div id="video-description"></div>
+                </div>
+                <div id="comments-section">
+                    <h3 id="comments-title">Commentaires</h3>
+                    <div id="comments-list"></div>
+                    <div id="comments-load-more-wrapper"></div>
+                </div>
+            </div>
+            <div id="video-sidebar">
+                <div id="related-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ZONE PROFIL DE CHAINE -->
+    <div id="channel-zone">
+        <button class="back-btn" onclick="closeChannel()">← Retour à la recherche</button>
+        <div id="channel-header"></div>
+        <h1 class="small-title">Vidéos</h1>
+        <div id="channel-videos"></div>
+        <div id="channel-load-more-wrapper"></div>
     </div>
 
     <script>
-        document.getElementById('video-query').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') searchVideo();
+        // ---------- État global ----------
+        let currentSearch = { query: '', type: 'video', order: 'relevance', videoDuration: 'any', uploadDate: 'any', pageToken: null };
+        let currentChannel = { id: null, pageToken: null };
+        let currentComments = { videoId: null, pageToken: null };
+
+        document.getElementById('video-query').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') newSearch();
         });
 
-        async function searchVideo() {
-            const query = document.getElementById('video-query').value.trim();
-            const resultsContainer = document.getElementById('results');
+        // ---------- Utilitaires ----------
+        function formatNumber(num) {
+            if (num === undefined || num === null) return '—';
+            num = parseInt(num, 10);
+            if (isNaN(num)) return '—';
+            if (num >= 1_000_000) return (num / 1_000_000).toFixed(1).replace('.0', '') + ' M';
+            if (num >= 1_000) return (num / 1_000).toFixed(1).replace('.0', '') + ' k';
+            return num.toString();
+        }
 
+        function formatDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        function parseDuration(iso) {
+            if (!iso) return '';
+            const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+            if (!match) return '';
+            const h = parseInt(match[1] || '0', 10);
+            const m = parseInt(match[2] || '0', 10);
+            const s = parseInt(match[3] || '0', 10);
+            const pad = n => n.toString().padStart(2, '0');
+            if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+            return `${m}:${pad(s)}`;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ---------- Recherche ----------
+        function newSearch() {
+            const query = document.getElementById('video-query').value.trim();
             if (!query) {
-                resultsContainer.innerHTML = "<p class='status-msg'>Veuillez saisir un mot-clé.</p>";
+                document.getElementById('results').innerHTML = "<p class='status-msg'>Veuillez saisir un mot-clé.</p>";
                 return;
             }
+            currentSearch = {
+                query,
+                type: document.getElementById('filter-type').value,
+                order: document.getElementById('filter-order').value,
+                videoDuration: document.getElementById('filter-duration').value,
+                uploadDate: document.getElementById('filter-date').value,
+                pageToken: null
+            };
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('load-more-wrapper').innerHTML = '';
+            runSearch(false);
+        }
 
-            resultsContainer.innerHTML = "<p class='status-msg'>Recherche en cours...</p>";
+        async function runSearch(append) {
+            const resultsContainer = document.getElementById('results');
+            const loadMoreWrapper = document.getElementById('load-more-wrapper');
+            if (!append) resultsContainer.innerHTML = "<p class='status-msg'>Recherche en cours...</p>";
 
             try {
-                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const params = new URLSearchParams({
+                    q: currentSearch.query,
+                    type: currentSearch.type,
+                    order: currentSearch.order,
+                    videoDuration: currentSearch.videoDuration,
+                    uploadDate: currentSearch.uploadDate
+                });
+                if (currentSearch.pageToken) params.set('pageToken', currentSearch.pageToken);
+
+                const response = await fetch(`/api/search?${params.toString()}`);
                 const data = await response.json();
 
+                if (!append) resultsContainer.innerHTML = '';
+
                 if (data.items && data.items.length > 0) {
-                    resultsContainer.innerHTML = "";
-                    
                     data.items.forEach(item => {
-                        const videoId = item.id.videoId;
-                        // Si l'élément n'a pas de videoId (ex: une chaîne ou playlist), on l'ignore
-                        if (!videoId) return;
-
-                        const title = item.snippet.title;
-                        const channelTitle = item.snippet.channelTitle;
-                        const description = item.snippet.description || "Aucune description.";
-                        const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
-
-                        const resultElement = document.createElement('div');
-                        resultElement.className = 'video-result';
-                        resultElement.innerHTML = `
-                            <img src="${thumbnail}" alt="${title}">
-                            <div class="video-info">
-                                <div class="video-title" title="${title}">${title}</div>
-                                <div class="video-channel">${channelTitle}</div>
-                                <div class="video-desc">${description}</div>
-                            </div>
-                        `;
-                        
-                        resultElement.onclick = () => loadVideo(videoId);
-                        resultsContainer.appendChild(resultElement);
+                        if (currentSearch.type === 'video') {
+                            resultsContainer.appendChild(buildVideoResult(item));
+                        } else {
+                            resultsContainer.appendChild(buildChannelResult(item));
+                        }
                     });
-                } else {
-                    resultsContainer.innerHTML = "<p class='status-msg'>Aucune vidéo trouvée.</p>";
+                } else if (!append) {
+                    resultsContainer.innerHTML = "<p class='status-msg'>Aucun résultat trouvé.</p>";
+                }
+
+                currentSearch.pageToken = data.nextPageToken || null;
+                loadMoreWrapper.innerHTML = '';
+                if (currentSearch.pageToken) {
+                    const btn = document.createElement('button');
+                    btn.className = 'voir-plus-btn';
+                    btn.textContent = 'Voir plus';
+                    btn.onclick = () => runSearch(true);
+                    loadMoreWrapper.appendChild(btn);
                 }
             } catch (error) {
                 resultsContainer.innerHTML = `<p class='status-msg' style='color: var(--yt-red);'>Erreur : ${error.message}</p>`;
             }
         }
 
-        function loadVideo(videoId) {
-            // Étape 1 : Masquer proprement la recherche et afficher le bloc du joueur
-            document.getElementById('search-zone').style.display = 'none';
-            document.getElementById('player-zone').style.display = 'flex';
+        function buildVideoResult(item) {
+            const videoId = item.id.videoId;
+            const title = item.snippet.title;
+            const channelTitle = item.snippet.channelTitle;
+            const channelId = item.snippet.channelId;
+            const description = item.snippet.description || 'Aucune description.';
+            const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+            const views = item.statistics ? formatNumber(item.statistics.viewCount) : null;
+            const duration = item.contentDetails ? parseDuration(item.contentDetails.duration) : null;
+            const publishedAt = formatDate(item.snippet.publishedAt);
 
-            // Étape 2 : Injecter l'iframe à l'intérieur du wrapper responsive
-            const videoContainer = document.getElementById('video-container');
-            videoContainer.innerHTML = `
+            const el = document.createElement('div');
+            el.className = 'video-result';
+            el.innerHTML = `
+                <div class="thumb-wrapper">
+                    <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                    ${duration ? `<span class="duration-tag">${duration}</span>` : ''}
+                </div>
+                <div class="video-info">
+                    <div class="video-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                    <div class="video-channel" data-channel-id="${channelId}">${escapeHtml(channelTitle)}</div>
+                    <div class="video-meta">${views ? views + ' vues • ' : ''}${publishedAt}</div>
+                    <div class="video-desc">${escapeHtml(description)}</div>
+                </div>
+            `;
+            el.querySelector('.video-channel').onclick = (e) => {
+                e.stopPropagation();
+                openChannel(channelId);
+            };
+            el.onclick = () => loadVideo(videoId);
+            return el;
+        }
+
+        function buildChannelResult(item) {
+            const channelId = item.id.channelId;
+            const title = item.snippet.title;
+            const description = item.snippet.description || 'Aucune description.';
+            const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+            const subs = item.statistics && !item.statistics.hiddenSubscriberCount ? formatNumber(item.statistics.subscriberCount) + ' abonnés' : 'Nombre d\\'abonnés masqué';
+
+            const el = document.createElement('div');
+            el.className = 'channel-result';
+            el.innerHTML = `
+                <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                <div class="channel-info">
+                    <div class="channel-title">${escapeHtml(title)}</div>
+                    <div class="channel-sub">${subs}</div>
+                    <div class="video-desc">${escapeHtml(description)}</div>
+                </div>
+            `;
+            el.onclick = () => openChannel(channelId);
+            return el;
+        }
+
+        // ---------- Lecture vidéo ----------
+        async function loadVideo(videoId) {
+            document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('channel-zone').style.display = 'none';
+            document.getElementById('player-zone').style.display = 'flex';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            document.getElementById('video-container').innerHTML = `
                 <div class="video-wrapper">
                     <iframe
                         src="https://www.youtube.com/embed/${videoId}?autoplay=1"
@@ -308,17 +757,228 @@
                     </iframe>
                 </div>
             `;
-            
-            // Remonte l'écran en haut de page pour le confort visuel
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            document.getElementById('video-title-el').textContent = 'Chargement...';
+            document.getElementById('video-stats-row').innerHTML = '';
+            document.getElementById('video-description').textContent = '';
+            document.getElementById('comments-list').innerHTML = '';
+            document.getElementById('comments-load-more-wrapper').innerHTML = '';
+            document.getElementById('related-list').innerHTML = "<p class='status-msg'>Chargement...</p>";
+
+            try {
+                const res = await fetch(`/api/video?id=${encodeURIComponent(videoId)}`);
+                const data = await res.json();
+                const video = data.items && data.items[0];
+                if (!video) {
+                    document.getElementById('video-title-el').textContent = 'Vidéo introuvable.';
+                    return;
+                }
+
+                document.getElementById('video-title-el').textContent = video.snippet.title;
+
+                const stats = video.statistics || {};
+                document.getElementById('video-stats-row').innerHTML = `
+                    <span class="stat">👁 ${formatNumber(stats.viewCount)} vues</span>
+                    <span class="stat">👍 ${formatNumber(stats.likeCount)}</span>
+                    <span class="stat">💬 ${formatNumber(stats.commentCount)}</span>
+                    <span class="stat">📅 ${formatDate(video.snippet.publishedAt)}</span>
+                `;
+
+                document.getElementById('video-description').textContent = video.snippet.description || 'Aucune description.';
+
+                const channelBlock = document.getElementById('video-channel-block');
+                document.getElementById('video-channel-name').textContent = video.snippet.channelTitle;
+                channelBlock.onclick = () => openChannel(video.snippet.channelId);
+
+                // Récupère l'avatar + abonnés de la chaîne
+                const chRes = await fetch(`/api/channel?id=${encodeURIComponent(video.snippet.channelId)}`);
+                const chData = await chRes.json();
+                const channel = chData.items && chData.items[0];
+                if (channel) {
+                    document.getElementById('video-channel-avatar').src = channel.snippet.thumbnails.default.url;
+                    document.getElementById('video-channel-subs').textContent = channel.statistics.hiddenSubscriberCount
+                        ? "Nombre d'abonnés masqué"
+                        : formatNumber(channel.statistics.subscriberCount) + ' abonnés';
+                }
+
+                loadComments(videoId, false);
+                loadRelated(videoId);
+            } catch (error) {
+                document.getElementById('video-title-el').textContent = 'Erreur lors du chargement de la vidéo.';
+            }
+        }
+
+        async function loadComments(videoId, append) {
+            if (!append) currentComments = { videoId, pageToken: null };
+            const listEl = document.getElementById('comments-list');
+            const loadMoreWrapper = document.getElementById('comments-load-more-wrapper');
+
+            try {
+                const params = new URLSearchParams({ videoId });
+                if (currentComments.pageToken) params.set('pageToken', currentComments.pageToken);
+
+                const res = await fetch(`/api/comments?${params.toString()}`);
+                const data = await res.json();
+
+                if (data.commentsDisabled) {
+                    listEl.innerHTML = "<p class='status-msg'>Les commentaires sont désactivés pour cette vidéo.</p>";
+                    return;
+                }
+
+                if (!append) listEl.innerHTML = '';
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => {
+                        const c = item.snippet.topLevelComment.snippet;
+                        const el = document.createElement('div');
+                        el.className = 'comment-item';
+                        el.innerHTML = `
+                            <img src="${c.authorProfileImageUrl}" alt="">
+                            <div>
+                                <div class="comment-author">${escapeHtml(c.authorDisplayName)}<span class="comment-date">${formatDate(c.publishedAt)}</span></div>
+                                <div class="comment-text">${escapeHtml(c.textDisplay)}</div>
+                                <div class="comment-likes">👍 ${formatNumber(c.likeCount)}</div>
+                            </div>
+                        `;
+                        listEl.appendChild(el);
+                    });
+                } else if (!append) {
+                    listEl.innerHTML = "<p class='status-msg'>Aucun commentaire.</p>";
+                }
+
+                currentComments.pageToken = data.nextPageToken || null;
+                loadMoreWrapper.innerHTML = '';
+                if (currentComments.pageToken) {
+                    const btn = document.createElement('button');
+                    btn.className = 'voir-plus-btn';
+                    btn.textContent = 'Voir plus de commentaires';
+                    btn.onclick = () => loadComments(videoId, true);
+                    loadMoreWrapper.appendChild(btn);
+                }
+            } catch (error) {
+                listEl.innerHTML = "<p class='status-msg'>Impossible de charger les commentaires.</p>";
+            }
+        }
+
+        async function loadRelated(videoId) {
+            const relatedList = document.getElementById('related-list');
+            relatedList.innerHTML = "<p class='status-msg'>Chargement...</p>";
+            try {
+                const res = await fetch(`/api/related?videoId=${encodeURIComponent(videoId)}`);
+                const data = await res.json();
+                relatedList.innerHTML = '';
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => {
+                        const vId = item.id.videoId;
+                        const title = item.snippet.title;
+                        const channelTitle = item.snippet.channelTitle;
+                        const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+                        const views = item.statistics ? formatNumber(item.statistics.viewCount) + ' vues' : '';
+
+                        const el = document.createElement('div');
+                        el.className = 'related-item';
+                        el.innerHTML = `
+                            <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                            <div class="related-info">
+                                <div class="related-title">${escapeHtml(title)}</div>
+                                <div class="related-channel">${escapeHtml(channelTitle)}</div>
+                                <div class="related-meta">${views}</div>
+                            </div>
+                        `;
+                        el.onclick = () => loadVideo(vId);
+                        relatedList.appendChild(el);
+                    });
+                } else {
+                    relatedList.innerHTML = "<p class='status-msg'>Aucune vidéo associée trouvée.</p>";
+                }
+            } catch (error) {
+                relatedList.innerHTML = "<p class='status-msg'>Impossible de charger les vidéos associées.</p>";
+            }
         }
 
         function closeVideo() {
-            // Étape 1 : Cacher le lecteur et vider l'iframe pour stopper net le son
             document.getElementById('player-zone').style.display = 'none';
-            document.getElementById('video-container').innerHTML = ''; 
+            document.getElementById('video-container').innerHTML = '';
+            document.getElementById('search-zone').style.display = 'flex';
+        }
 
-            // Étape 2 : Réafficher la zone de recherche (Correction de la coquille ici)
+        // ---------- Profil de chaîne ----------
+        async function openChannel(channelId) {
+            document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('player-zone').style.display = 'none';
+            document.getElementById('video-container').innerHTML = '';
+            document.getElementById('channel-zone').style.display = 'flex';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            document.getElementById('channel-header').innerHTML = "<p class='status-msg'>Chargement...</p>";
+            document.getElementById('channel-videos').innerHTML = '';
+            document.getElementById('channel-load-more-wrapper').innerHTML = '';
+
+            try {
+                const res = await fetch(`/api/channel?id=${encodeURIComponent(channelId)}`);
+                const data = await res.json();
+                const channel = data.items && data.items[0];
+                if (!channel) {
+                    document.getElementById('channel-header').innerHTML = "<p class='status-msg'>Chaîne introuvable.</p>";
+                    return;
+                }
+
+                const subs = channel.statistics.hiddenSubscriberCount
+                    ? "Nombre d'abonnés masqué"
+                    : formatNumber(channel.statistics.subscriberCount) + ' abonnés';
+
+                document.getElementById('channel-header').innerHTML = `
+                    <img src="${channel.snippet.thumbnails.medium ? channel.snippet.thumbnails.medium.url : channel.snippet.thumbnails.default.url}" alt="${escapeHtml(channel.snippet.title)}">
+                    <div>
+                        <h2>${escapeHtml(channel.snippet.title)}</h2>
+                        <div class="channel-header-stats">${subs} • ${formatNumber(channel.statistics.videoCount)} vidéos • ${formatNumber(channel.statistics.viewCount)} vues</div>
+                        <div class="channel-header-desc">${escapeHtml((channel.snippet.description || '').slice(0, 220))}${channel.snippet.description && channel.snippet.description.length > 220 ? '…' : ''}</div>
+                    </div>
+                `;
+
+                currentChannel = { id: channelId, pageToken: null };
+                loadChannelVideos(false);
+            } catch (error) {
+                document.getElementById('channel-header').innerHTML = "<p class='status-msg'>Erreur lors du chargement de la chaîne.</p>";
+            }
+        }
+
+        async function loadChannelVideos(append) {
+            const container = document.getElementById('channel-videos');
+            const loadMoreWrapper = document.getElementById('channel-load-more-wrapper');
+            if (!append) container.innerHTML = "<p class='status-msg'>Chargement des vidéos...</p>";
+
+            try {
+                const params = new URLSearchParams({ id: currentChannel.id });
+                if (currentChannel.pageToken) params.set('pageToken', currentChannel.pageToken);
+
+                const res = await fetch(`/api/channel-videos?${params.toString()}`);
+                const data = await res.json();
+
+                if (!append) container.innerHTML = '';
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => container.appendChild(buildVideoResult(item)));
+                } else if (!append) {
+                    container.innerHTML = "<p class='status-msg'>Aucune vidéo trouvée pour cette chaîne.</p>";
+                }
+
+                currentChannel.pageToken = data.nextPageToken || null;
+                loadMoreWrapper.innerHTML = '';
+                if (currentChannel.pageToken) {
+                    const btn = document.createElement('button');
+                    btn.className = 'voir-plus-btn';
+                    btn.textContent = 'Voir plus';
+                    btn.onclick = () => loadChannelVideos(true);
+                    loadMoreWrapper.appendChild(btn);
+                }
+            } catch (error) {
+                container.innerHTML = "<p class='status-msg'>Erreur lors du chargement des vidéos.</p>";
+            }
+        }
+
+        function closeChannel() {
+            document.getElementById('channel-zone').style.display = 'none';
             document.getElementById('search-zone').style.display = 'flex';
         }
     </script>
