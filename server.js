@@ -55,17 +55,19 @@ function publishedAfterFromFilter(filter) {
 
 /**
  * GET /api/search
- * Query params: q, type (video|channel), order, videoDuration, uploadDate, pageToken
+ * Query params: q, type (video|channel|playlist), order, videoDuration, uploadDate, pageToken, music (true|false)
  */
 app.get('/api/search', async (req, res) => {
     const apiKey = getApiKey(res);
     if (!apiKey) return;
 
     const { q, pageToken } = req.query;
-    const type = req.query.type === 'channel' ? 'channel' : 'video';
+    const validTypes = ['video', 'channel', 'playlist'];
+    const type = validTypes.includes(req.query.type) ? req.query.type : 'video';
     const order = req.query.order || 'relevance';
     const videoDuration = req.query.videoDuration || 'any';
     const uploadDate = req.query.uploadDate || 'any';
+    const musicOnly = req.query.music === 'true';
 
     if (!q) {
         return res.status(400).json({ error: "Le paramètre de recherche 'q' est manquant." });
@@ -85,6 +87,11 @@ app.get('/api/search', async (req, res) => {
             params.set('videoDuration', videoDuration);
         }
 
+        // Le filtre "Musique" ne s'applique qu'aux vidéos : videoCategoryId=10 = catégorie "Musique" de YouTube
+        if (type === 'video' && musicOnly) {
+            params.set('videoCategoryId', '10');
+        }
+
         const publishedAfter = publishedAfterFromFilter(uploadDate);
         if (publishedAfter) {
             params.set('publishedAfter', publishedAfter);
@@ -96,7 +103,7 @@ app.get('/api/search', async (req, res) => {
 
         const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
 
-        // Enrichissement : on va chercher les stats (vues/likes/durée ou abonnés) en un seul appel groupé
+        // Enrichissement : on va chercher les stats (vues/likes/durée, abonnés, ou nb de vidéos) en un seul appel groupé
         if (type === 'video') {
             const videoIds = data.items.map(item => item.id.videoId).filter(Boolean);
             if (videoIds.length > 0) {
@@ -113,7 +120,7 @@ app.get('/api/search', async (req, res) => {
                     }
                 });
             }
-        } else {
+        } else if (type === 'channel') {
             const channelIds = data.items.map(item => item.id.channelId).filter(Boolean);
             if (channelIds.length > 0) {
                 const statsData = await fetchJSON(
@@ -125,6 +132,21 @@ app.get('/api/search', async (req, res) => {
                     const extra = statsMap[item.id.channelId];
                     if (extra) {
                         item.statistics = extra.statistics;
+                    }
+                });
+            }
+        } else if (type === 'playlist') {
+            const playlistIds = data.items.map(item => item.id.playlistId).filter(Boolean);
+            if (playlistIds.length > 0) {
+                const statsData = await fetchJSON(
+                    `${API_BASE}/playlists?part=contentDetails&id=${playlistIds.join(',')}&key=${apiKey}`
+                );
+                const statsMap = {};
+                statsData.items.forEach(p => { statsMap[p.id] = p; });
+                data.items.forEach(item => {
+                    const extra = statsMap[item.id.playlistId];
+                    if (extra) {
+                        item.contentDetails = extra.contentDetails;
                     }
                 });
             }
@@ -246,6 +268,77 @@ app.get('/api/channel-videos', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ error: "Erreur lors de la récupération des vidéos de la chaîne.", details: error.message });
+    }
+});
+
+/**
+ * GET /api/playlist?id=PLAYLIST_ID&pageToken=...
+ * Retourne les infos de la playlist (titre, chaîne, nb de vidéos) + ses pistes paginées.
+ */
+app.get('/api/playlist', async (req, res) => {
+    const apiKey = getApiKey(res);
+    if (!apiKey) return;
+
+    const { id, pageToken } = req.query;
+    if (!id) return res.status(400).json({ error: "Le paramètre 'id' est manquant." });
+
+    try {
+        // 1. Infos générales de la playlist
+        const playlistInfoData = await fetchJSON(
+            `${API_BASE}/playlists?part=snippet,contentDetails&id=${encodeURIComponent(id)}&key=${apiKey}`
+        );
+        const playlistInfo = playlistInfoData.items && playlistInfoData.items[0];
+        if (!playlistInfo) {
+            return res.status(404).json({ error: 'Playlist introuvable.' });
+        }
+
+        // 2. Pistes de la playlist
+        const params = new URLSearchParams({
+            part: 'snippet',
+            playlistId: id,
+            maxResults: '25',
+            key: apiKey
+        });
+        if (pageToken) params.set('pageToken', pageToken);
+
+        const itemsData = await fetchJSON(`${API_BASE}/playlistItems?${params.toString()}`);
+
+        const items = itemsData.items.filter(item => item.snippet.resourceId && item.snippet.resourceId.videoId);
+
+        // 3. Durée + stats de chaque piste
+        const videoIds = items.map(item => item.snippet.resourceId.videoId);
+        if (videoIds.length > 0) {
+            const statsData = await fetchJSON(
+                `${API_BASE}/videos?part=statistics,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`
+            );
+            const statsMap = {};
+            statsData.items.forEach(v => { statsMap[v.id] = v; });
+            items.forEach(item => {
+                const extra = statsMap[item.snippet.resourceId.videoId];
+                if (extra) {
+                    item.statistics = extra.statistics;
+                    item.contentDetails = extra.contentDetails;
+                }
+            });
+        }
+
+        res.json({
+            playlist: {
+                id,
+                title: playlistInfo.snippet.title,
+                description: playlistInfo.snippet.description,
+                channelTitle: playlistInfo.snippet.channelTitle,
+                channelId: playlistInfo.snippet.channelId,
+                thumbnail: playlistInfo.snippet.thumbnails.medium
+                    ? playlistInfo.snippet.thumbnails.medium.url
+                    : playlistInfo.snippet.thumbnails.default.url,
+                itemCount: playlistInfo.contentDetails.itemCount
+            },
+            items,
+            nextPageToken: itemsData.nextPageToken || null
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur lors de la récupération de la playlist.", details: error.message });
     }
 });
 
