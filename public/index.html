@@ -114,6 +114,25 @@
             outline: none;
         }
 
+        .pill-toggle {
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid var(--border-light);
+            background-color: var(--bg-search);
+            color: var(--text-color);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+
+        .pill-toggle.active {
+            background-color: var(--yt-red);
+            border-color: var(--yt-red);
+            color: #fff;
+        }
+
         /* Résultats de recherche */
         #results {
             width: 100%;
@@ -486,6 +505,131 @@
             gap: 16px;
         }
 
+        /* Résultat playlist dans la liste de recherche */
+        .playlist-result img {
+            width: 240px;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            border-radius: 8px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .playlist-result .thumb-wrapper .duration-tag {
+            background: rgba(0,0,0,0.8);
+        }
+
+        /* Vue lecteur de playlist */
+        #playlist-zone {
+            display: none;
+            width: 100%;
+            max-width: 900px;
+            flex-direction: column;
+            animation: fadeIn 0.4s ease;
+        }
+
+        #playlist-header {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 20px;
+        }
+
+        #playlist-header img {
+            width: 140px;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+
+        #playlist-header h2 { margin: 0 0 6px 0; font-size: 1.4rem; }
+        #playlist-header .playlist-header-stats {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 6px;
+            cursor: pointer;
+            width: fit-content;
+        }
+        #playlist-header .playlist-header-stats:hover { text-decoration: underline; }
+        #playlist-header .playlist-header-desc {
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            max-width: 600px;
+        }
+
+        #playlist-player-wrapper {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        #playlist-tracks {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .track-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .track-item:hover { background-color: #fafafa; }
+        .track-item.playing {
+            background-color: #fff0f0;
+        }
+
+        .track-position {
+            width: 24px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+        .track-item.playing .track-position { color: var(--yt-red); font-weight: 700; }
+
+        .track-thumb-wrapper {
+            position: relative;
+            flex-shrink: 0;
+        }
+        .track-thumb-wrapper img {
+            width: 120px;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+        .track-thumb-wrapper .duration-tag {
+            position: absolute;
+            bottom: 4px;
+            right: 4px;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            font-size: 0.68rem;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+
+        .track-info { min-width: 0; }
+        .track-title {
+            font-size: 0.92rem;
+            font-weight: 600;
+            line-height: 1.25rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .track-channel {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
         .status-msg {
             text-align: center;
             color: var(--text-secondary);
@@ -569,6 +713,20 @@
             }
             #channel-header .channel-header-desc { max-width: 100%; }
 
+            #playlist-header {
+                flex-direction: column;
+                text-align: center;
+                gap: 10px;
+            }
+            #playlist-header img { width: 100%; max-width: 260px; }
+            #playlist-header .playlist-header-stats { margin: 0 auto 6px auto; }
+            #playlist-header .playlist-header-desc { max-width: 100%; }
+
+            .track-item { padding: 6px 4px; gap: 8px; }
+            .track-thumb-wrapper img { width: 90px; }
+            .track-title { font-size: 0.85rem; }
+            .track-channel { font-size: 0.72rem; }
+
             .back-btn {
                 width: 100%;
                 justify-content: center;
@@ -599,9 +757,11 @@
         </div>
 
         <div id="filters">
-            <select id="filter-type">
+            <button type="button" id="music-toggle" class="pill-toggle" onclick="toggleMusicMode()">🎵 Musique</button>
+            <select id="filter-type" onchange="onTypeChange()">
                 <option value="video">Vidéos</option>
                 <option value="channel">Chaînes</option>
+                <option value="playlist">Playlists</option>
             </select>
             <select id="filter-order">
                 <option value="relevance">Pertinence</option>
@@ -668,15 +828,39 @@
         <div id="channel-load-more-wrapper"></div>
     </div>
 
+    <!-- ZONE LECTEUR DE PLAYLIST -->
+    <div id="playlist-zone">
+        <button class="back-btn" onclick="closePlaylist()">← Retour à la recherche</button>
+        <div id="playlist-header"></div>
+        <div id="playlist-player-wrapper"></div>
+        <h1 class="small-title">Pistes</h1>
+        <div id="playlist-tracks"></div>
+        <div id="playlist-load-more-wrapper"></div>
+    </div>
+
     <script>
         // ---------- État global ----------
-        let currentSearch = { query: '', type: 'video', order: 'relevance', videoDuration: 'any', uploadDate: 'any', pageToken: null };
+        let currentSearch = { query: '', type: 'video', order: 'relevance', videoDuration: 'any', uploadDate: 'any', pageToken: null, music: false };
         let currentChannel = { id: null, pageToken: null };
         let currentComments = { videoId: null, pageToken: null };
+        let currentPlaylist = { id: null, pageToken: null, tracks: [] };
+        let musicMode = false;
 
         document.getElementById('video-query').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') newSearch();
         });
+
+        function toggleMusicMode() {
+            musicMode = !musicMode;
+            document.getElementById('music-toggle').classList.toggle('active', musicMode);
+        }
+
+        function onTypeChange() {
+            const type = document.getElementById('filter-type').value;
+            const durationSelect = document.getElementById('filter-duration');
+            // La durée et le filtre musique ne s'appliquent qu'aux vidéos
+            durationSelect.style.display = type === 'video' ? '' : 'none';
+        }
 
         // ---------- Utilitaires ----------
         function formatNumber(num) {
@@ -734,7 +918,8 @@
                 order: document.getElementById('filter-order').value,
                 videoDuration: document.getElementById('filter-duration').value,
                 uploadDate: document.getElementById('filter-date').value,
-                pageToken: null
+                pageToken: null,
+                music: musicMode
             };
             document.getElementById('results').innerHTML = '';
             document.getElementById('load-more-wrapper').innerHTML = '';
@@ -752,7 +937,8 @@
                     type: currentSearch.type,
                     order: currentSearch.order,
                     videoDuration: currentSearch.videoDuration,
-                    uploadDate: currentSearch.uploadDate
+                    uploadDate: currentSearch.uploadDate,
+                    music: currentSearch.music ? 'true' : 'false'
                 });
                 if (currentSearch.pageToken) params.set('pageToken', currentSearch.pageToken);
 
@@ -765,8 +951,10 @@
                     data.items.forEach(item => {
                         if (currentSearch.type === 'video') {
                             resultsContainer.appendChild(buildVideoResult(item));
-                        } else {
+                        } else if (currentSearch.type === 'channel') {
                             resultsContainer.appendChild(buildChannelResult(item));
+                        } else {
+                            resultsContainer.appendChild(buildPlaylistResult(item));
                         }
                     });
                 } else if (!append) {
@@ -841,10 +1029,36 @@
             return el;
         }
 
+        function buildPlaylistResult(item) {
+            const playlistId = item.id.playlistId;
+            const title = item.snippet.title;
+            const channelTitle = item.snippet.channelTitle;
+            const description = item.snippet.description || 'Aucune description.';
+            const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+            const itemCount = item.contentDetails ? item.contentDetails.itemCount : null;
+
+            const el = document.createElement('div');
+            el.className = 'video-result playlist-result';
+            el.innerHTML = `
+                <div class="thumb-wrapper">
+                    <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                    ${itemCount !== null ? `<span class="duration-tag">▶ ${itemCount} vidéos</span>` : ''}
+                </div>
+                <div class="video-info">
+                    <div class="video-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                    <div class="video-channel">${escapeHtml(channelTitle)}</div>
+                    <div class="video-desc">${escapeHtml(description)}</div>
+                </div>
+            `;
+            el.onclick = () => openPlaylist(playlistId);
+            return el;
+        }
+
         // ---------- Lecture vidéo ----------
         async function loadVideo(videoId) {
             document.getElementById('search-zone').style.display = 'none';
             document.getElementById('channel-zone').style.display = 'none';
+            document.getElementById('playlist-zone').style.display = 'none';
             document.getElementById('player-zone').style.display = 'flex';
             window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -1006,6 +1220,7 @@
         async function openChannel(channelId) {
             document.getElementById('search-zone').style.display = 'none';
             document.getElementById('player-zone').style.display = 'none';
+            document.getElementById('playlist-zone').style.display = 'none';
             document.getElementById('video-container').innerHTML = '';
             document.getElementById('channel-zone').style.display = 'flex';
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1079,6 +1294,143 @@
 
         function closeChannel() {
             document.getElementById('channel-zone').style.display = 'none';
+            document.getElementById('search-zone').style.display = 'flex';
+        }
+
+        // ---------- Lecture de playlist ----------
+        async function openPlaylist(playlistId) {
+            document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('player-zone').style.display = 'none';
+            document.getElementById('channel-zone').style.display = 'none';
+            document.getElementById('video-container').innerHTML = '';
+            document.getElementById('playlist-zone').style.display = 'flex';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            document.getElementById('playlist-header').innerHTML = "<p class='status-msg'>Chargement...</p>";
+            document.getElementById('playlist-player-wrapper').innerHTML = '';
+            document.getElementById('playlist-tracks').innerHTML = '';
+            document.getElementById('playlist-load-more-wrapper').innerHTML = '';
+
+            currentPlaylist = { id: playlistId, pageToken: null, tracks: [] };
+            await loadPlaylistTracks(false);
+        }
+
+        async function loadPlaylistTracks(append) {
+            const tracksContainer = document.getElementById('playlist-tracks');
+            const loadMoreWrapper = document.getElementById('playlist-load-more-wrapper');
+            if (!append) tracksContainer.innerHTML = "<p class='status-msg'>Chargement des pistes...</p>";
+
+            try {
+                const params = new URLSearchParams({ id: currentPlaylist.id });
+                if (currentPlaylist.pageToken) params.set('pageToken', currentPlaylist.pageToken);
+
+                const res = await fetch(`/api/playlist?${params.toString()}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    tracksContainer.innerHTML = `<p class='status-msg' style='color: var(--yt-red);'>Erreur : ${escapeHtml(data.error)}</p>`;
+                    return;
+                }
+
+                // En-tête + lecteur, seulement au premier chargement
+                if (!append) {
+                    const p = data.playlist;
+                    document.getElementById('playlist-header').innerHTML = `
+                        <img src="${p.thumbnail}" alt="${escapeHtml(p.title)}">
+                        <div>
+                            <h2>${escapeHtml(p.title)}</h2>
+                            <div class="playlist-header-stats" id="playlist-channel-link">${escapeHtml(p.channelTitle)} • ${formatNumber(p.itemCount)} vidéos</div>
+                            <div class="playlist-header-desc">${escapeHtml((p.description || '').slice(0, 200))}${p.description && p.description.length > 200 ? '…' : ''}</div>
+                        </div>
+                    `;
+                    const channelLink = document.getElementById('playlist-channel-link');
+                    if (channelLink) channelLink.onclick = () => openChannel(p.channelId);
+
+                    // Lecteur natif YouTube en mode "playlist" : gère automatiquement l'enchaînement des pistes
+                    document.getElementById('playlist-player-wrapper').innerHTML = `
+                        <div class="video-wrapper">
+                            <iframe
+                                src="https://www.youtube.com/embed/videoseries?list=${currentPlaylist.id}&autoplay=1"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowfullscreen>
+                            </iframe>
+                        </div>
+                    `;
+                    tracksContainer.innerHTML = '';
+                }
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach((item, idx) => {
+                        const position = append ? currentPlaylist.tracks.length + idx + 1 : currentPlaylist.tracks.length + idx + 1;
+                        tracksContainer.appendChild(buildTrackItem(item, position));
+                    });
+                    currentPlaylist.tracks = currentPlaylist.tracks.concat(data.items);
+                } else if (!append) {
+                    tracksContainer.innerHTML = "<p class='status-msg'>Cette playlist ne contient aucune vidéo.</p>";
+                }
+
+                currentPlaylist.pageToken = data.nextPageToken || null;
+                loadMoreWrapper.innerHTML = '';
+                if (currentPlaylist.pageToken) {
+                    const btn = document.createElement('button');
+                    btn.className = 'voir-plus-btn';
+                    btn.textContent = 'Voir plus de pistes';
+                    btn.onclick = () => loadPlaylistTracks(true);
+                    loadMoreWrapper.appendChild(btn);
+                }
+            } catch (error) {
+                tracksContainer.innerHTML = "<p class='status-msg'>Erreur lors du chargement de la playlist.</p>";
+            }
+        }
+
+        function buildTrackItem(item, position) {
+            const videoId = item.snippet.resourceId.videoId;
+            const title = item.snippet.title;
+            const channelTitle = item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle;
+            const thumbnail = item.snippet.thumbnails && item.snippet.thumbnails.medium
+                ? item.snippet.thumbnails.medium.url
+                : (item.snippet.thumbnails ? item.snippet.thumbnails.default.url : '');
+            const duration = item.contentDetails ? parseDuration(item.contentDetails.duration) : null;
+
+            const el = document.createElement('div');
+            el.className = 'track-item';
+            el.dataset.videoId = videoId;
+            el.innerHTML = `
+                <div class="track-position">${position}</div>
+                <div class="track-thumb-wrapper">
+                    <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                    ${duration ? `<span class="duration-tag">${duration}</span>` : ''}
+                </div>
+                <div class="track-info">
+                    <div class="track-title">${escapeHtml(title)}</div>
+                    <div class="track-channel">${escapeHtml(channelTitle || '')}</div>
+                </div>
+            `;
+            el.onclick = () => playTrack(videoId, position);
+            return el;
+        }
+
+        function playTrack(videoId, position) {
+            document.querySelectorAll('.track-item').forEach(el => el.classList.remove('playing'));
+            const activeEl = document.querySelector(`.track-item[data-video-id="${videoId}"]`);
+            if (activeEl) activeEl.classList.add('playing');
+
+            // On recharge le lecteur sur la piste choisie, en gardant le contexte de la playlist (index = position - 1)
+            document.getElementById('playlist-player-wrapper').innerHTML = `
+                <div class="video-wrapper">
+                    <iframe
+                        src="https://www.youtube.com/embed/${videoId}?list=${currentPlaylist.id}&index=${position}&autoplay=1"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowfullscreen>
+                    </iframe>
+                </div>
+            `;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function closePlaylist() {
+            document.getElementById('playlist-zone').style.display = 'none';
+            document.getElementById('playlist-player-wrapper').innerHTML = '';
             document.getElementById('search-zone').style.display = 'flex';
         }
     </script>
