@@ -429,6 +429,71 @@ app.get('/api/related', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/shorts?q=&pageToken=
+ * Flux de vidéos courtes (Shorts). YouTube n'a pas d'endpoint officiel "shorts.list",
+ * on cible donc les vidéos courtes (<= ~60s) via videoDuration=short puis on filtre
+ * localement sur la durée réelle pour ne garder que les vrais Shorts.
+ */
+app.get('/api/shorts', async (req, res) => {
+    const apiKey = getApiKey(res);
+    if (!apiKey) return;
+
+    const q = req.query.q || 'shorts';
+    const pageToken = req.query.pageToken;
+
+    try {
+        const params = new URLSearchParams({
+            part: 'snippet',
+            q,
+            type: 'video',
+            videoDuration: 'short',
+            order: req.query.q ? 'relevance' : 'viewCount',
+            maxResults: '15',
+            key: apiKey
+        });
+        if (pageToken) params.set('pageToken', pageToken);
+
+        const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
+
+        const videoIds = data.items.map(item => item.id.videoId).filter(Boolean);
+        let items = data.items;
+
+        if (videoIds.length > 0) {
+            const statsData = await fetchJSON(
+                `${API_BASE}/videos?part=statistics,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`
+            );
+            const statsMap = {};
+            statsData.items.forEach(v => { statsMap[v.id] = v; });
+            items.forEach(item => {
+                const extra = statsMap[item.id.videoId];
+                if (extra) {
+                    item.statistics = extra.statistics;
+                    item.contentDetails = extra.contentDetails;
+                }
+            });
+
+            // Ne garde que les vidéos réellement courtes (<= 61s). Si le filtre élimine
+            // tout (résultats atypiques), on retombe sur la liste non filtrée.
+            const parseSeconds = (iso) => {
+                if (!iso) return Infinity;
+                const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                if (!m) return Infinity;
+                const h = parseInt(m[1] || '0', 10);
+                const mi = parseInt(m[2] || '0', 10);
+                const s = parseInt(m[3] || '0', 10);
+                return h * 3600 + mi * 60 + s;
+            };
+            const filtered = items.filter(item => item.contentDetails && parseSeconds(item.contentDetails.duration) <= 61);
+            if (filtered.length > 0) items = filtered;
+        }
+
+        res.json({ items, nextPageToken: data.nextPageToken || null });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur lors de la récupération des Shorts.", details: error.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Serveur démarré sur le port ${PORT}`);
 });
