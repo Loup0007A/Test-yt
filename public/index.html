@@ -637,6 +637,385 @@
             margin-top: 20px;
         }
 
+        /* ---------- Barre d'onglets ---------- */
+        #tab-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 18px;
+            width: 100%;
+            max-width: 700px;
+            justify-content: center;
+        }
+        .tab-btn {
+            flex: 1;
+            max-width: 160px;
+            padding: 10px 14px;
+            border-radius: 24px;
+            border: 1px solid var(--border-light);
+            background-color: var(--bg-search);
+            color: var(--text-secondary);
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .tab-btn.active {
+            background-color: var(--yt-red);
+            border-color: var(--yt-red);
+            color: #fff;
+        }
+
+        /* ---------- Onglet Shorts ---------- */
+        #shorts-zone {
+            display: none;
+            width: 100%;
+            max-width: 460px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #shorts-search-bar {
+            display: flex;
+            width: 100%;
+            border: 1px solid var(--border-light);
+            border-radius: 40px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+        #shorts-search-bar input {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        #shorts-search-bar button {
+            padding: 0 20px;
+            border: none;
+            border-left: 1px solid var(--border-light);
+            background: var(--bg-search);
+            cursor: pointer;
+        }
+
+        #shorts-feed {
+            width: 100%;
+            height: 78vh;
+            max-height: 780px;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            border-radius: 18px;
+            background: #000;
+            scrollbar-width: none;
+        }
+        #shorts-feed::-webkit-scrollbar { display: none; }
+
+        .short-item {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .short-item iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .short-overlay {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 16px 60px 20px 16px;
+            background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
+            color: #fff;
+            pointer-events: none;
+        }
+        .short-overlay * { pointer-events: auto; }
+
+        .short-channel {
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+            cursor: pointer;
+            width: fit-content;
+        }
+        .short-title {
+            font-size: 0.88rem;
+            line-height: 1.25rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+        .short-meta {
+            font-size: 0.78rem;
+            opacity: 0.85;
+        }
+
+        .short-side-actions {
+            position: absolute;
+            right: 10px;
+            bottom: 90px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            color: #fff;
+        }
+        .short-action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            background: none;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 1.5rem;
+            filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+        }
+        .short-action-btn span.count {
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .short-loading {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-style: italic;
+        }
+
+        /* Panneau de commentaires des Shorts (glisse depuis le bas) */
+        #short-comments-panel {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            max-height: 65vh;
+            background: var(--bg-color);
+            border-radius: 18px 18px 0 0;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+            padding: 16px;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 200;
+            overflow-y: auto;
+        }
+        #short-comments-panel.open { transform: translateY(0); }
+        #short-comments-panel .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #short-comments-panel .panel-close {
+            background: var(--bg-search);
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        /* ---------- Onglet Music ---------- */
+        #music-zone {
+            display: none;
+            width: 100%;
+            max-width: 900px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #music-search-bar {
+            display: flex;
+            width: 100%;
+            max-width: 700px;
+            border: 1px solid var(--border-light);
+            border-radius: 40px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+        #music-search-bar input {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            background: transparent;
+            font-size: 1rem;
+            outline: none;
+        }
+        #music-search-bar button {
+            padding: 0 28px;
+            border: none;
+            border-left: 1px solid var(--border-light);
+            background: var(--bg-search);
+            cursor: pointer;
+        }
+
+        #music-type-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        #music-results {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding-bottom: 110px; /* place pour le lecteur en bas */
+        }
+
+        .music-result-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .music-result-item:hover { background-color: #fafafa; }
+        .music-result-item.playing { background-color: #fff0f0; }
+        .music-result-item img {
+            width: 64px;
+            height: 64px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .music-result-item .mri-info { min-width: 0; }
+        .music-result-item .mri-title {
+            font-weight: 600;
+            font-size: 0.92rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .music-result-item .mri-sub {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+        .music-result-item .mri-play-icon {
+            margin-left: auto;
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        /* ---------- Lecteur persistant en bas ---------- */
+        #bottom-player-bar {
+            display: none;
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            background: var(--bg-color);
+            border-top: 1px solid var(--border-light);
+            box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+            padding: 8px 16px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
+            z-index: 150;
+        }
+        #bottom-player-bar.visible { display: block; }
+
+        #bp-seek {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--border-light);
+            border-radius: 2px;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        #bp-seek::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--yt-red);
+            cursor: pointer;
+        }
+
+        #bp-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        #bp-thumb {
+            width: 46px;
+            height: 46px;
+            border-radius: 6px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        #bp-info { min-width: 0; flex: 1; }
+        #bp-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #bp-channel {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #bp-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        #bp-controls button {
+            background: none;
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            color: var(--text-color);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #bp-controls button:hover { background-color: var(--bg-search); }
+        #bp-play-btn { font-size: 1.6rem !important; }
+        #bp-time {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+            width: 74px;
+            text-align: center;
+        }
+
+        /* Conteneur du lecteur YouTube IFrame API pour la musique (invisible mais présent, requis pour l'autoplay/contrôle) */
+        #yt-music-player-wrapper {
+            position: fixed;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+            bottom: 0;
+            left: 0;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -748,6 +1127,13 @@
 </head>
 <body>
 
+    <!-- BARRE D'ONGLETS -->
+    <div id="tab-bar">
+        <button class="tab-btn active" data-tab="search" onclick="switchTab('search')">🔍 Recherche</button>
+        <button class="tab-btn" data-tab="shorts" onclick="switchTab('shorts')">📱 Shorts</button>
+        <button class="tab-btn" data-tab="music" onclick="switchTab('music')">🎵 Music</button>
+    </div>
+
     <!-- ZONE DE RECHERCHE -->
     <div id="search-zone">
         <h1>Rechercher</h1>
@@ -788,6 +1174,7 @@
         <div id="results"></div>
         <div id="load-more-wrapper"></div>
     </div>
+
 
     <!-- ZONE LECTEUR -->
     <div id="player-zone">
@@ -838,6 +1225,60 @@
         <div id="playlist-load-more-wrapper"></div>
     </div>
 
+    <!-- ONGLET SHORTS -->
+    <div id="shorts-zone">
+        <div id="shorts-search-bar">
+            <input type="text" id="shorts-query" placeholder="Rechercher des Shorts...">
+            <button onclick="newShortsSearch()">🔍</button>
+        </div>
+        <div id="shorts-feed"></div>
+    </div>
+
+    <div id="short-comments-panel">
+        <div class="panel-header">
+            <h3 style="margin:0;">Commentaires</h3>
+            <button class="panel-close" onclick="closeShortComments()">✕</button>
+        </div>
+        <div id="short-comments-list"></div>
+    </div>
+
+    <!-- ONGLET MUSIC -->
+    <div id="music-zone">
+        <h1>Music</h1>
+        <div id="music-search-bar">
+            <input type="text" id="music-query" placeholder="Rechercher un titre, un artiste, une playlist...">
+            <button onclick="newMusicSearch()">Rechercher</button>
+        </div>
+        <div id="music-type-toggle">
+            <button type="button" class="pill-toggle active" id="music-type-track" onclick="setMusicSearchType('video')">🎵 Titres</button>
+            <button type="button" class="pill-toggle" id="music-type-playlist" onclick="setMusicSearchType('playlist')">📃 Playlists</button>
+            <button type="button" class="pill-toggle" id="music-type-artist" onclick="setMusicSearchType('channel')">🎤 Artistes</button>
+        </div>
+        <div id="music-results"></div>
+        <div id="music-load-more-wrapper"></div>
+    </div>
+
+    <!-- LECTEUR MUSIQUE PERSISTANT EN BAS -->
+    <div id="bottom-player-bar">
+        <input type="range" id="bp-seek" min="0" max="100" value="0">
+        <div id="bp-content">
+            <img id="bp-thumb" src="" alt="">
+            <div id="bp-info">
+                <div id="bp-title">—</div>
+                <div id="bp-channel">—</div>
+            </div>
+            <div id="bp-time">0:00 / 0:00</div>
+            <div id="bp-controls">
+                <button id="bp-prev-btn" onclick="musicPlayPrev()" title="Précédent">⏮</button>
+                <button id="bp-play-btn" onclick="toggleMusicPlayPause()" title="Lecture/Pause">▶️</button>
+                <button id="bp-next-btn" onclick="musicPlayNext()" title="Suivant">⏭</button>
+                <button id="bp-close-btn" onclick="closeMusicPlayer()" title="Fermer">✕</button>
+            </div>
+        </div>
+    </div>
+    <div id="yt-music-player-wrapper"><div id="yt-music-player"></div></div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
         // ---------- État global ----------
         let currentSearch = { query: '', type: 'video', order: 'relevance', videoDuration: 'any', uploadDate: 'any', pageToken: null, music: false };
@@ -845,9 +1286,32 @@
         let currentComments = { videoId: null, pageToken: null };
         let currentPlaylist = { id: null, pageToken: null, tracks: [] };
         let musicMode = false;
+        let currentTab = 'search';
+
+        // ---------- Shorts : état ----------
+        let currentShortsQuery = '';
+        let shortsPageToken = null;
+        let shortsLoadingMore = false;
+        let shortsInitialized = false;
+        let shortsObserver = null;
+
+        // ---------- Music : état ----------
+        let musicSearchState = { q: '', type: 'video', pageToken: null };
+        let ytMusicPlayer = null;
+        let ytMusicPlayerReady = false;
+        let musicPendingVideoId = null;
+        let musicQueue = [];
+        let musicQueueIndex = -1;
+        let musicProgressInterval = null;
 
         document.getElementById('video-query').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') newSearch();
+        });
+        document.getElementById('shorts-query').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') newShortsSearch();
+        });
+        document.getElementById('music-query').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') newMusicSearch();
         });
 
         function toggleMusicMode() {
@@ -860,6 +1324,42 @@
             const durationSelect = document.getElementById('filter-duration');
             // La durée et le filtre musique ne s'appliquent qu'aux vidéos
             durationSelect.style.display = type === 'video' ? '' : 'none';
+        }
+
+        // ---------- Gestion des onglets ----------
+        function hideAllTabZones() {
+            document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('shorts-zone').style.display = 'none';
+            document.getElementById('music-zone').style.display = 'none';
+        }
+
+        function hideAllOverlayZones() {
+            document.getElementById('player-zone').style.display = 'none';
+            document.getElementById('video-container').innerHTML = '';
+            document.getElementById('channel-zone').style.display = 'none';
+            document.getElementById('playlist-zone').style.display = 'none';
+            document.getElementById('playlist-player-wrapper').innerHTML = '';
+            document.getElementById('short-comments-panel').classList.remove('open');
+        }
+
+        function showActiveTabZone() {
+            hideAllTabZones();
+            document.getElementById(currentTab + '-zone').style.display = 'flex';
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+            hideAllOverlayZones();
+            showActiveTabZone();
+
+            if (tab === 'shorts' && !shortsInitialized) {
+                shortsInitialized = true;
+                setupShortsObserver();
+                loadShorts(false);
+            }
+            // Le lecteur musique (bottom-player-bar) n'est jamais touché ici :
+            // il reste actif et visible quel que soit l'onglet, comme un vrai lecteur en fond.
         }
 
         // ---------- Utilitaires ----------
@@ -1057,6 +1557,8 @@
         // ---------- Lecture vidéo ----------
         async function loadVideo(videoId) {
             document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('shorts-zone').style.display = 'none';
+            document.getElementById('music-zone').style.display = 'none';
             document.getElementById('channel-zone').style.display = 'none';
             document.getElementById('playlist-zone').style.display = 'none';
             document.getElementById('player-zone').style.display = 'flex';
@@ -1213,12 +1715,14 @@
         function closeVideo() {
             document.getElementById('player-zone').style.display = 'none';
             document.getElementById('video-container').innerHTML = '';
-            document.getElementById('search-zone').style.display = 'flex';
+            showActiveTabZone();
         }
 
         // ---------- Profil de chaîne ----------
         async function openChannel(channelId) {
             document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('shorts-zone').style.display = 'none';
+            document.getElementById('music-zone').style.display = 'none';
             document.getElementById('player-zone').style.display = 'none';
             document.getElementById('playlist-zone').style.display = 'none';
             document.getElementById('video-container').innerHTML = '';
@@ -1294,12 +1798,14 @@
 
         function closeChannel() {
             document.getElementById('channel-zone').style.display = 'none';
-            document.getElementById('search-zone').style.display = 'flex';
+            showActiveTabZone();
         }
 
         // ---------- Lecture de playlist ----------
         async function openPlaylist(playlistId) {
             document.getElementById('search-zone').style.display = 'none';
+            document.getElementById('shorts-zone').style.display = 'none';
+            document.getElementById('music-zone').style.display = 'none';
             document.getElementById('player-zone').style.display = 'none';
             document.getElementById('channel-zone').style.display = 'none';
             document.getElementById('video-container').innerHTML = '';
@@ -1431,8 +1937,458 @@
         function closePlaylist() {
             document.getElementById('playlist-zone').style.display = 'none';
             document.getElementById('playlist-player-wrapper').innerHTML = '';
-            document.getElementById('search-zone').style.display = 'flex';
+            showActiveTabZone();
         }
+
+        // ==================== ONGLET SHORTS ====================
+
+        function buildShortEmbedUrl(videoId, muted) {
+            return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${muted ? 1 : 0}&loop=1&playlist=${videoId}&controls=1&modestbranding=1&rel=0&playsinline=1`;
+        }
+
+        function setupShortsObserver() {
+            shortsObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const el = entry.target;
+                    if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+                        if (!el.querySelector('iframe')) {
+                            const muted = el.dataset.muted !== 'false';
+                            const placeholder = el.querySelector('.short-loading');
+                            if (placeholder) placeholder.remove();
+                            const iframe = document.createElement('iframe');
+                            iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+                            iframe.src = buildShortEmbedUrl(el.dataset.videoId, muted);
+                            el.prepend(iframe);
+                        }
+                        // Charge la page suivante quand on approche de la fin du flux
+                        const allItems = document.querySelectorAll('#shorts-feed .short-item');
+                        if (allItems.length >= 3 && el === allItems[allItems.length - 3] && shortsPageToken) {
+                            loadShorts(true);
+                        }
+                    } else {
+                        const iframe = el.querySelector('iframe');
+                        if (iframe) iframe.remove();
+                        if (!el.querySelector('.short-loading')) {
+                            const ph = document.createElement('div');
+                            ph.className = 'short-loading';
+                            el.prepend(ph);
+                        }
+                    }
+                });
+            }, { root: document.getElementById('shorts-feed'), threshold: [0, 0.6, 1] });
+        }
+
+        function buildShortItem(item) {
+            const videoId = item.id.videoId;
+            const title = item.snippet.title;
+            const channelTitle = item.snippet.channelTitle;
+            const channelId = item.snippet.channelId;
+            const views = item.statistics ? formatNumber(item.statistics.viewCount) : null;
+            const likes = item.statistics ? formatNumber(item.statistics.likeCount) : '';
+            const comments = item.statistics ? formatNumber(item.statistics.commentCount) : '';
+
+            const el = document.createElement('div');
+            el.className = 'short-item';
+            el.dataset.videoId = videoId;
+            el.dataset.muted = 'true';
+            el.innerHTML = `
+                <div class="short-loading">Chargement...</div>
+                <div class="short-overlay">
+                    <div class="short-channel" data-channel-id="${channelId}">@${escapeHtml(channelTitle)}</div>
+                    <div class="short-title">${escapeHtml(title)}</div>
+                    <div class="short-meta">${views ? views + ' vues' : ''}</div>
+                </div>
+                <div class="short-side-actions">
+                    <button class="short-action-btn" data-role="like" title="J'aime">👍<span class="count">${likes}</span></button>
+                    <button class="short-action-btn" data-role="comments" title="Commentaires">💬<span class="count">${comments}</span></button>
+                    <button class="short-action-btn" data-role="mute" title="Son">🔇</button>
+                </div>
+            `;
+            el.querySelector('.short-channel').onclick = (e) => { e.stopPropagation(); openChannel(channelId); };
+            el.querySelector('[data-role="comments"]').onclick = (e) => { e.stopPropagation(); openShortComments(videoId); };
+            el.querySelector('[data-role="mute"]').onclick = (e) => {
+                e.stopPropagation();
+                toggleShortMute(el);
+            };
+            // Le bouton "J'aime" est indicatif : l'API publique YouTube ne permet pas de liker sans authentification utilisateur
+            el.querySelector('[data-role="like"]').onclick = (e) => e.stopPropagation();
+
+            if (shortsObserver) shortsObserver.observe(el);
+            return el;
+        }
+
+        function toggleShortMute(el) {
+            const iframe = el.querySelector('iframe');
+            const btn = el.querySelector('[data-role="mute"]');
+            const nowMuted = el.dataset.muted !== 'true'; // on inverse l'état actuel
+            el.dataset.muted = nowMuted ? 'true' : 'false';
+            if (iframe) {
+                iframe.src = buildShortEmbedUrl(el.dataset.videoId, nowMuted);
+            }
+            btn.textContent = nowMuted ? '🔇' : '🔊';
+        }
+
+        async function loadShorts(append) {
+            if (shortsLoadingMore) return;
+            shortsLoadingMore = true;
+            const feed = document.getElementById('shorts-feed');
+            if (!append) feed.innerHTML = "<div class='short-loading'>Chargement des Shorts...</div>";
+
+            try {
+                const params = new URLSearchParams({});
+                if (currentShortsQuery) params.set('q', currentShortsQuery);
+                if (shortsPageToken) params.set('pageToken', shortsPageToken);
+
+                const res = await fetch(`/api/shorts?${params.toString()}`);
+                const data = await res.json();
+
+                if (!append) feed.innerHTML = '';
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => feed.appendChild(buildShortItem(item)));
+                } else if (!append) {
+                    feed.innerHTML = "<div class='short-loading'>Aucun Short trouvé.</div>";
+                }
+
+                shortsPageToken = data.nextPageToken || null;
+            } catch (error) {
+                if (!append) feed.innerHTML = "<div class='short-loading'>Erreur de chargement.</div>";
+            } finally {
+                shortsLoadingMore = false;
+            }
+        }
+
+        function newShortsSearch() {
+            const q = document.getElementById('shorts-query').value.trim();
+            currentShortsQuery = q;
+            shortsPageToken = null;
+            loadShorts(false);
+        }
+
+        async function openShortComments(videoId) {
+            const panel = document.getElementById('short-comments-panel');
+            const list = document.getElementById('short-comments-list');
+            list.innerHTML = "<p class='status-msg'>Chargement...</p>";
+            panel.classList.add('open');
+
+            try {
+                const res = await fetch(`/api/comments?videoId=${encodeURIComponent(videoId)}`);
+                const data = await res.json();
+
+                if (data.commentsDisabled) {
+                    list.innerHTML = "<p class='status-msg'>Les commentaires sont désactivés pour ce Short.</p>";
+                    return;
+                }
+
+                list.innerHTML = '';
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => {
+                        const c = item.snippet.topLevelComment.snippet;
+                        const el = document.createElement('div');
+                        el.className = 'comment-item';
+                        el.innerHTML = `
+                            <img src="${c.authorProfileImageUrl}" alt="">
+                            <div>
+                                <div class="comment-author">${escapeHtml(c.authorDisplayName)}<span class="comment-date">${formatDate(c.publishedAt)}</span></div>
+                                <div class="comment-text">${escapeHtml(c.textDisplay)}</div>
+                                <div class="comment-likes">👍 ${formatNumber(c.likeCount)}</div>
+                            </div>
+                        `;
+                        list.appendChild(el);
+                    });
+                } else {
+                    list.innerHTML = "<p class='status-msg'>Aucun commentaire.</p>";
+                }
+            } catch (error) {
+                list.innerHTML = "<p class='status-msg'>Erreur lors du chargement des commentaires.</p>";
+            }
+        }
+
+        function closeShortComments() {
+            document.getElementById('short-comments-panel').classList.remove('open');
+        }
+
+        // ==================== ONGLET MUSIC ====================
+
+        function setMusicSearchType(type) {
+            musicSearchState.type = type;
+            musicSearchState.pageToken = null;
+            document.getElementById('music-type-track').classList.toggle('active', type === 'video');
+            document.getElementById('music-type-playlist').classList.toggle('active', type === 'playlist');
+            document.getElementById('music-type-artist').classList.toggle('active', type === 'channel');
+            if (musicSearchState.q) runMusicSearch(false);
+        }
+
+        function newMusicSearch() {
+            const q = document.getElementById('music-query').value.trim();
+            musicSearchState.q = q;
+            musicSearchState.pageToken = null;
+            runMusicSearch(false);
+        }
+
+        function buildMusicResultItem(item, type) {
+            const el = document.createElement('div');
+            el.className = 'music-result-item';
+
+            if (type === 'video') {
+                const videoId = item.id.videoId;
+                const title = item.snippet.title;
+                const channelTitle = item.snippet.channelTitle;
+                const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+                el.dataset.videoId = videoId;
+                el.innerHTML = `
+                    <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                    <div class="mri-info">
+                        <div class="mri-title">${escapeHtml(title)}</div>
+                        <div class="mri-sub">${escapeHtml(channelTitle)}</div>
+                    </div>
+                    <div class="mri-play-icon">▶️</div>
+                `;
+                el.onclick = () => playMusicFromResults(videoId);
+            } else if (type === 'playlist') {
+                const playlistId = item.id.playlistId;
+                const title = item.snippet.title;
+                const channelTitle = item.snippet.channelTitle;
+                const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+                const count = item.contentDetails ? item.contentDetails.itemCount : null;
+                el.innerHTML = `
+                    <img src="${thumbnail}" alt="${escapeHtml(title)}">
+                    <div class="mri-info">
+                        <div class="mri-title">${escapeHtml(title)}</div>
+                        <div class="mri-sub">${escapeHtml(channelTitle)}${count !== null ? ' • ' + count + ' titres' : ''}</div>
+                    </div>
+                    <div class="mri-play-icon">📃</div>
+                `;
+                el.onclick = () => playMusicPlaylist(playlistId);
+            } else {
+                const channelId = item.id.channelId;
+                const title = item.snippet.title;
+                const thumbnail = item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : item.snippet.thumbnails.default.url;
+                el.innerHTML = `
+                    <img src="${thumbnail}" alt="${escapeHtml(title)}" style="border-radius:50%;">
+                    <div class="mri-info">
+                        <div class="mri-title">${escapeHtml(title)}</div>
+                        <div class="mri-sub">Chaîne / Artiste</div>
+                    </div>
+                    <div class="mri-play-icon">›</div>
+                `;
+                el.onclick = () => openChannel(channelId);
+            }
+            return el;
+        }
+
+        async function runMusicSearch(append) {
+            const container = document.getElementById('music-results');
+            const loadMoreWrapper = document.getElementById('music-load-more-wrapper');
+
+            if (!musicSearchState.q) {
+                container.innerHTML = "<p class='status-msg'>Recherchez un titre, un artiste ou une playlist musicale.</p>";
+                loadMoreWrapper.innerHTML = '';
+                return;
+            }
+            if (!append) container.innerHTML = "<p class='status-msg'>Recherche en cours...</p>";
+
+            try {
+                const params = new URLSearchParams({
+                    q: musicSearchState.q,
+                    type: musicSearchState.type,
+                    order: 'relevance',
+                    music: 'true'
+                });
+                if (musicSearchState.pageToken) params.set('pageToken', musicSearchState.pageToken);
+
+                const res = await fetch(`/api/search?${params.toString()}`);
+                const data = await res.json();
+
+                if (!append) container.innerHTML = '';
+
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => container.appendChild(buildMusicResultItem(item, musicSearchState.type)));
+                } else if (!append) {
+                    container.innerHTML = "<p class='status-msg'>Aucun résultat trouvé.</p>";
+                }
+
+                markPlayingMusicItem();
+
+                musicSearchState.pageToken = data.nextPageToken || null;
+                loadMoreWrapper.innerHTML = '';
+                if (musicSearchState.pageToken) {
+                    const btn = document.createElement('button');
+                    btn.className = 'voir-plus-btn';
+                    btn.textContent = 'Voir plus';
+                    btn.onclick = () => runMusicSearch(true);
+                    loadMoreWrapper.appendChild(btn);
+                }
+            } catch (error) {
+                container.innerHTML = "<p class='status-msg'>Erreur lors de la recherche.</p>";
+            }
+        }
+
+        function playMusicFromResults(videoId) {
+            const items = Array.from(document.querySelectorAll('#music-results .music-result-item[data-video-id]'));
+            const queue = items.map(el => ({
+                videoId: el.dataset.videoId,
+                title: el.querySelector('.mri-title').textContent,
+                channelTitle: el.querySelector('.mri-sub').textContent,
+                thumbnail: el.querySelector('img').src
+            }));
+            const index = queue.findIndex(t => t.videoId === videoId);
+            startMusicQueue(queue, index >= 0 ? index : 0);
+        }
+
+        async function playMusicPlaylist(playlistId) {
+            try {
+                const res = await fetch(`/api/playlist?id=${encodeURIComponent(playlistId)}`);
+                const data = await res.json();
+                if (!data.items || data.items.length === 0) return;
+                const queue = data.items.map(item => ({
+                    videoId: item.snippet.resourceId.videoId,
+                    title: item.snippet.title,
+                    channelTitle: item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle || '',
+                    thumbnail: item.snippet.thumbnails && item.snippet.thumbnails.medium
+                        ? item.snippet.thumbnails.medium.url
+                        : (item.snippet.thumbnails ? item.snippet.thumbnails.default.url : '')
+                }));
+                startMusicQueue(queue, 0);
+            } catch (error) {
+                console.error('Erreur lors du chargement de la playlist musicale', error);
+            }
+        }
+
+        // ---------- Moteur du lecteur musique (YouTube IFrame API) ----------
+        function onYouTubeIframeAPIReady() {
+            ytMusicPlayer = new YT.Player('yt-music-player', {
+                height: '1',
+                width: '1',
+                playerVars: { playsinline: 1, controls: 0 },
+                events: {
+                    onReady: () => {
+                        ytMusicPlayerReady = true;
+                        if (musicPendingVideoId) {
+                            ytMusicPlayer.loadVideoById(musicPendingVideoId);
+                            musicPendingVideoId = null;
+                        }
+                    },
+                    onStateChange: onMusicPlayerStateChange
+                }
+            });
+        }
+
+        function onMusicPlayerStateChange(event) {
+            const playBtn = document.getElementById('bp-play-btn');
+            if (event.data === YT.PlayerState.PLAYING) {
+                playBtn.textContent = '⏸️';
+                startProgressPolling();
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                playBtn.textContent = '▶️';
+                stopProgressPolling();
+            } else if (event.data === YT.PlayerState.ENDED) {
+                // Enchaînement automatique sur la piste suivante
+                musicPlayNext();
+            }
+        }
+
+        function startMusicQueue(queue, index) {
+            musicQueue = queue;
+            musicQueueIndex = index;
+            loadCurrentMusicTrack();
+        }
+
+        function loadCurrentMusicTrack() {
+            const track = musicQueue[musicQueueIndex];
+            if (!track) return;
+
+            document.getElementById('bp-thumb').src = track.thumbnail || '';
+            document.getElementById('bp-title').textContent = decodeHtmlEntities(track.title);
+            document.getElementById('bp-channel').textContent = decodeHtmlEntities(track.channelTitle || '');
+            document.getElementById('bottom-player-bar').classList.add('visible');
+            document.getElementById('bp-play-btn').textContent = '⏸️';
+
+            markPlayingMusicItem();
+
+            if (ytMusicPlayerReady && ytMusicPlayer) {
+                ytMusicPlayer.loadVideoById(track.videoId);
+            } else {
+                musicPendingVideoId = track.videoId;
+            }
+        }
+
+        function markPlayingMusicItem() {
+            document.querySelectorAll('.music-result-item').forEach(el => el.classList.remove('playing'));
+            const track = musicQueue[musicQueueIndex];
+            if (!track) return;
+            const activeEl = document.querySelector(`.music-result-item[data-video-id="${track.videoId}"]`);
+            if (activeEl) activeEl.classList.add('playing');
+        }
+
+        function musicPlayNext() {
+            if (musicQueueIndex < musicQueue.length - 1) {
+                musicQueueIndex++;
+                loadCurrentMusicTrack();
+            }
+        }
+
+        function musicPlayPrev() {
+            if (musicQueueIndex > 0) {
+                musicQueueIndex--;
+                loadCurrentMusicTrack();
+            }
+        }
+
+        function toggleMusicPlayPause() {
+            if (!ytMusicPlayer || !ytMusicPlayerReady) return;
+            const state = ytMusicPlayer.getPlayerState();
+            if (state === YT.PlayerState.PLAYING) {
+                ytMusicPlayer.pauseVideo();
+            } else {
+                ytMusicPlayer.playVideo();
+            }
+        }
+
+        function closeMusicPlayer() {
+            if (ytMusicPlayer && ytMusicPlayerReady) ytMusicPlayer.stopVideo();
+            document.getElementById('bottom-player-bar').classList.remove('visible');
+            musicQueue = [];
+            musicQueueIndex = -1;
+            stopProgressPolling();
+            document.querySelectorAll('.music-result-item').forEach(el => el.classList.remove('playing'));
+        }
+
+        function formatTime(sec) {
+            sec = Math.floor(sec || 0);
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function startProgressPolling() {
+            stopProgressPolling();
+            musicProgressInterval = setInterval(() => {
+                if (!ytMusicPlayer || !ytMusicPlayer.getDuration) return;
+                const duration = ytMusicPlayer.getDuration() || 0;
+                const current = ytMusicPlayer.getCurrentTime() || 0;
+                const seek = document.getElementById('bp-seek');
+                if (seek.dataset.dragging !== 'true') {
+                    seek.value = duration ? (current / duration) * 100 : 0;
+                }
+                document.getElementById('bp-time').textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+            }, 500);
+        }
+
+        function stopProgressPolling() {
+            if (musicProgressInterval) clearInterval(musicProgressInterval);
+            musicProgressInterval = null;
+        }
+
+        const bpSeekEl = document.getElementById('bp-seek');
+        bpSeekEl.addEventListener('input', () => { bpSeekEl.dataset.dragging = 'true'; });
+        bpSeekEl.addEventListener('change', () => {
+            if (ytMusicPlayer && ytMusicPlayer.getDuration) {
+                const duration = ytMusicPlayer.getDuration() || 0;
+                ytMusicPlayer.seekTo((bpSeekEl.value / 100) * duration, true);
+            }
+            delete bpSeekEl.dataset.dragging;
+        });
     </script>
 </body>
 </html>
