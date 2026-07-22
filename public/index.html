@@ -699,6 +699,7 @@
         }
 
         #shorts-feed {
+            position: relative;
             width: 100%;
             height: 78vh;
             max-height: 780px;
@@ -709,6 +710,35 @@
             scrollbar-width: none;
         }
         #shorts-feed::-webkit-scrollbar { display: none; }
+
+        #shorts-toast {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-16px);
+            background: rgba(0,0,0,0.85);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 60;
+            white-space: nowrap;
+        }
+        #shorts-toast.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        #shorts-region-badge {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-align: center;
+        }
 
         .short-item {
             position: relative;
@@ -1231,6 +1261,7 @@
             <input type="text" id="shorts-query" placeholder="Rechercher des Shorts...">
             <button onclick="newShortsSearch()">🔍</button>
         </div>
+        <div id="shorts-region-badge"></div>
         <div id="shorts-feed"></div>
     </div>
 
@@ -1294,6 +1325,18 @@
         let shortsLoadingMore = false;
         let shortsInitialized = false;
         let shortsObserver = null;
+
+        // Détection de "skip rapide" : si plusieurs Shorts d'affilée sont quittés en 3s ou moins,
+        // on considère que le sujet actuel ne plaît pas et on change complètement de répertoire.
+        const SHORTS_SKIP_SECONDS_THRESHOLD = 3;
+        const SHORTS_SKIP_STREAK_THRESHOLD = 3;
+        let shortsConsecutiveSkips = 0;
+        let lastShortsCategory = null;
+        const SHORTS_CATEGORY_POOL = [
+            'humour', 'musique', 'sport', 'cuisine', 'voyage', 'technologie',
+            'gaming', 'art', 'science', 'mode', 'animaux', 'actualités',
+            'bricolage', 'fitness', 'cinéma', 'nature', 'danse', 'automobile'
+        ];
 
         // Empreinte visiteur (fingerprint) : identifiant stable côté navigateur, combiné à l'IP côté
         // serveur pour la personnalisation du flux Shorts. Persisté en localStorage pour rester stable
@@ -2021,6 +2064,18 @@
                             const watchSeconds = (Date.now() - parseInt(el.dataset.watchStart, 10)) / 1000;
                             delete el.dataset.watchStart;
                             if (watchSeconds > 0.5) sendShortViewEvent(el, watchSeconds);
+
+                            // Détection de skip rapide : plusieurs Shorts quittés en 3s ou moins d'affilée
+                            // => le sujet actuel ne plaît visiblement pas, on change complètement de répertoire.
+                            if (watchSeconds <= SHORTS_SKIP_SECONDS_THRESHOLD) {
+                                shortsConsecutiveSkips++;
+                                if (shortsConsecutiveSkips >= SHORTS_SKIP_STREAK_THRESHOLD) {
+                                    shortsConsecutiveSkips = 0;
+                                    triggerShortsTopicReset();
+                                }
+                            } else {
+                                shortsConsecutiveSkips = 0;
+                            }
                         }
                     }
                 });
@@ -2066,6 +2121,39 @@
                 if (watchSeconds > 0.5) sendShortViewEvent(activeItem, watchSeconds);
             }
         });
+
+        // Choisit une nouvelle catégorie de contenu, différente de la précédente
+        function pickNewShortsCategory() {
+            const options = SHORTS_CATEGORY_POOL.filter(c => c !== lastShortsCategory);
+            const pick = options[Math.floor(Math.random() * options.length)];
+            lastShortsCategory = pick;
+            return pick;
+        }
+
+        // Change complètement de répertoire de contenu : nouvelle catégorie, flux entièrement rechargé
+        function triggerShortsTopicReset() {
+            const newCategory = pickNewShortsCategory();
+            currentShortsQuery = newCategory;
+            shortsPageToken = null;
+            const input = document.getElementById('shorts-query');
+            if (input) input.value = newCategory;
+            showShortsToast(`On change de contenu : ${newCategory} 🔄`);
+            loadShorts(false);
+        }
+
+        function showShortsToast(message) {
+            const feed = document.getElementById('shorts-feed');
+            let toast = document.getElementById('shorts-toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'shorts-toast';
+                feed.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.classList.add('visible');
+            clearTimeout(toast._hideTimeout);
+            toast._hideTimeout = setTimeout(() => toast.classList.remove('visible'), 2500);
+        }
 
         function buildShortItem(item) {
             const videoId = item.id.videoId;
@@ -2147,6 +2235,11 @@
                 }
 
                 shortsPageToken = data.nextPageToken || null;
+
+                const badge = document.getElementById('shorts-region-badge');
+                if (badge) {
+                    badge.textContent = data.region ? `📍 Contenus localisés : ${data.region}` : '';
+                }
             } catch (error) {
                 if (!append) feed.innerHTML = "<div class='short-loading'>Erreur de chargement.</div>";
             } finally {
