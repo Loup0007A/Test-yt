@@ -1,13 +1,138 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+// ---------- Base de données (Supabase / Postgres) ----------
+// DATABASE_URL doit être la connection string du "Session pooler" de Supabase.
+// Si elle n'est pas définie, l'app continue de fonctionner normalement mais sans personnalisation.
+let pool = null;
+if (process.env.DATABASE_URL) {
+    pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false }
+    });
+    pool.on('error', (err) => console.error('Erreur inattendue du pool Postgres:', err.message));
+} else {
+    console.warn("DATABASE_URL non défini : la personnalisation des Shorts est désactivée.");
+}
+
+async function initDb() {
+    if (!pool) return;
+    try {
+        // Un "viewer" = un visiteur identifié par empreinte (fingerprint) + IP la plus récente
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS viewers (
+                id SERIAL PRIMARY KEY,
+                fingerprint TEXT UNIQUE NOT NULL,
+                ip TEXT,
+                first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
+                last_seen TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        `);
+        // Chaque ligne = une vidéo Short visionnée par un viewer, avec le temps réel passé dessus
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS short_views (
+                id SERIAL PRIMARY KEY,
+                viewer_id INTEGER NOT NULL REFERENCES viewers(id) ON DELETE CASCADE,
+                video_id TEXT NOT NULL,
+                channel_id TEXT,
+                channel_title TEXT,
+                category_id TEXT,
+                tags TEXT[] DEFAULT '{}',
+                watch_seconds NUMERIC NOT NULL,
+                total_duration NUMERIC,
+                watch_ratio NUMERIC,
+                completed BOOLEAN DEFAULT false,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+        `);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_short_views_viewer ON short_views(viewer_id);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_short_views_video ON short_views(viewer_id, video_id);`);
+        await pool.query(`CREATE INDEX IF NOT EXISTS idx_viewers_fingerprint_ip ON viewers(fingerprint, ip);`);
+        console.log('Base de données prête (tables viewers / short_views).');
+    } catch (error) {
+        console.error('Erreur lors de l\'initialisation de la base de données:', error.message);
+    }
+}
+
+function getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) return forwarded.split(',')[0].trim();
+    return req.socket.remoteAddress || '';
+}
+
+// Récupère (ou crée) l'identité d'un viewer à partir de son fingerprint, en notant son IP actuelle.
+// L'identité "primaire" est le fingerprint (stable sur un même appareil/navigateur) ; l'IP est
+// conservée en complément, comme demandé, pour affiner le suivi (repérer un même device sur des IP différentes,
+// ou plusieurs devices derrière la même IP lors des analyses).
+async function getOrCreateViewerId(fingerprint, ip) {
+    const { rows } = await pool.query(
+        `INSERT INTO viewers (fingerprint, ip, first_seen, last_seen)
+         VALUES ($1, $2, now(), now())
+         ON CONFLICT (fingerprint) DO UPDATE SET ip = EXCLUDED.ip, last_seen = now()
+         RETURNING id`,
+        [fingerprint, ip]
+    );
+    return rows[0].id;
+}
+
+// Construit le profil d'affinité d'un viewer à partir de son historique de visionnage :
+// - les vidéos déjà vues récemment (pour éviter les répétitions)
+// - les chaînes qu'il regarde le plus longtemps / le plus souvent (score = ratio moyen de visionnage x volume)
+// - les mots-clés (tags) associés aux vidéos qu'il regarde le plus
+async function getViewerProfile(fingerprint, ip) {
+    if (!pool || !fingerprint) return null;
+    try {
+        const viewerRes = await pool.query(`SELECT id FROM viewers WHERE fingerprint = $1 LIMIT 1`, [fingerprint]);
+        if (viewerRes.rows.length === 0) return null;
+        const viewerId = viewerRes.rows[0].id;
+
+        const seenRes = await pool.query(
+            `SELECT video_id FROM short_views WHERE viewer_id = $1 ORDER BY created_at DESC LIMIT 200`,
+            [viewerId]
+        );
+        const seenVideoIds = new Set(seenRes.rows.map(r => r.video_id));
+
+        const channelRes = await pool.query(
+            `SELECT channel_id, channel_title, AVG(watch_ratio) AS avg_ratio, COUNT(*) AS n
+             FROM short_views
+             WHERE viewer_id = $1 AND channel_id IS NOT NULL
+             GROUP BY channel_id, channel_title
+             ORDER BY (AVG(watch_ratio) * LN(1 + COUNT(*))) DESC
+             LIMIT 6`,
+            [viewerId]
+        );
+
+        const keywordRes = await pool.query(
+            `SELECT tag, AVG(watch_ratio) AS avg_ratio, COUNT(*) AS n
+             FROM short_views, LATERAL unnest(tags) AS tag
+             WHERE viewer_id = $1
+             GROUP BY tag
+             ORDER BY (AVG(watch_ratio) * LN(1 + COUNT(*))) DESC
+             LIMIT 8`,
+            [viewerId]
+        );
+
+        return {
+            viewerId,
+            seenVideoIds,
+            topChannels: channelRes.rows,
+            topKeywords: keywordRes.rows.map(r => r.tag)
+        };
+    } catch (error) {
+        console.error('Erreur lors de la récupération du profil viewer:', error.message);
+        return null;
+    }
+}
 
 function getApiKey(res) {
     const apiKey = process.env.API_V3_YT;
@@ -430,26 +555,47 @@ app.get('/api/related', async (req, res) => {
 });
 
 /**
- * GET /api/shorts?q=&pageToken=
+ * GET /api/shorts?q=&pageToken=&fp=FINGERPRINT
  * Flux de vidéos courtes (Shorts). YouTube n'a pas d'endpoint officiel "shorts.list",
  * on cible donc les vidéos courtes (<= ~60s) via videoDuration=short puis on filtre
  * localement sur la durée réelle pour ne garder que les vrais Shorts.
+ *
+ * Si un fingerprint (fp) est fourni et qu'un historique existe en base, le flux est
+ * personnalisé : requête de recherche orientée vers les centres d'intérêt appris
+ * (chaînes/mots-clés les mieux "regardés"), puis reclassement des résultats en
+ * favorisant les chaînes appréciées et en dépriorisant les vidéos déjà vues.
  */
 app.get('/api/shorts', async (req, res) => {
     const apiKey = getApiKey(res);
     if (!apiKey) return;
 
-    const q = req.query.q || 'shorts';
+    const userQuery = (req.query.q || '').trim();
     const pageToken = req.query.pageToken;
+    const fingerprint = req.query.fp || null;
+    const ip = getClientIp(req);
 
     try {
+        const profile = fingerprint ? await getViewerProfile(fingerprint, ip) : null;
+
+        // Requête effective : une recherche explicite de l'utilisateur est toujours respectée telle quelle.
+        // En l'absence de recherche, on pioche (70% du temps) dans les mots-clés les mieux "regardés"
+        // du profil pour biaiser le flux par défaut, tout en gardant un peu de flux générique pour la diversité.
+        let effectiveQuery = userQuery;
+        let order = userQuery ? 'relevance' : 'viewCount';
+        if (!userQuery && profile && profile.topKeywords.length > 0 && Math.random() < 0.7) {
+            const pool3 = profile.topKeywords.slice(0, 3);
+            effectiveQuery = pool3[Math.floor(Math.random() * pool3.length)];
+            order = 'relevance';
+        }
+        if (!effectiveQuery) effectiveQuery = 'shorts';
+
         const params = new URLSearchParams({
             part: 'snippet',
-            q,
+            q: effectiveQuery,
             type: 'video',
             videoDuration: 'short',
-            order: req.query.q ? 'relevance' : 'viewCount',
-            maxResults: '15',
+            order,
+            maxResults: '20',
             key: apiKey
         });
         if (pageToken) params.set('pageToken', pageToken);
@@ -461,7 +607,7 @@ app.get('/api/shorts', async (req, res) => {
 
         if (videoIds.length > 0) {
             const statsData = await fetchJSON(
-                `${API_BASE}/videos?part=statistics,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`
+                `${API_BASE}/videos?part=statistics,contentDetails,snippet&id=${videoIds.join(',')}&key=${apiKey}`
             );
             const statsMap = {};
             statsData.items.forEach(v => { statsMap[v.id] = v; });
@@ -470,6 +616,8 @@ app.get('/api/shorts', async (req, res) => {
                 if (extra) {
                     item.statistics = extra.statistics;
                     item.contentDetails = extra.contentDetails;
+                    item.tags = extra.snippet.tags || [];
+                    item.categoryId = extra.snippet.categoryId || null;
                 }
             });
 
@@ -488,12 +636,77 @@ app.get('/api/shorts', async (req, res) => {
             if (filtered.length > 0) items = filtered;
         }
 
-        res.json({ items, nextPageToken: data.nextPageToken || null });
+        // ---- Reclassement personnalisé ----
+        if (profile) {
+            const channelBoost = new Map(
+                profile.topChannels.map(c => [c.channel_id, parseFloat(c.avg_ratio) * Math.log(1 + parseInt(c.n, 10))])
+            );
+            items.forEach((item, idx) => {
+                let score = items.length - idx; // pertinence de base = ordre renvoyé par YouTube
+                const chId = item.snippet.channelId;
+                if (channelBoost.has(chId)) {
+                    score += channelBoost.get(chId) * 20; // forte préférence pour les chaînes appréciées
+                }
+                if (profile.seenVideoIds.has(item.id.videoId)) {
+                    score -= 1000; // fortement dépriorisé (pas exclu) si déjà vu récemment
+                }
+                item._score = score;
+            });
+            items.sort((a, b) => b._score - a._score);
+        }
+
+        res.json({ items, nextPageToken: data.nextPageToken || null, personalized: !!profile });
     } catch (error) {
         res.status(500).json({ error: "Erreur lors de la récupération des Shorts.", details: error.message });
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}`);
+/**
+ * POST /api/shorts/view
+ * Enregistre le temps réellement passé par un viewer sur un Short.
+ * Body attendu : { fingerprint, videoId, channelId, channelTitle, categoryId, tags, watchSeconds, totalDuration }
+ */
+app.post('/api/shorts/view', async (req, res) => {
+    if (!pool) return res.json({ ok: false, reason: 'db_disabled' });
+
+    const { fingerprint, videoId, channelId, channelTitle, categoryId, tags, watchSeconds, totalDuration } = req.body || {};
+    if (!fingerprint || !videoId || typeof watchSeconds !== 'number') {
+        return res.status(400).json({ error: 'Paramètres manquants ou invalides.' });
+    }
+
+    try {
+        const ip = getClientIp(req);
+        const viewerId = await getOrCreateViewerId(fingerprint, ip);
+
+        const duration = typeof totalDuration === 'number' && totalDuration > 0 ? totalDuration : null;
+        const watchRatio = duration ? Math.min(1, watchSeconds / duration) : null;
+        const completed = watchRatio !== null && watchRatio >= 0.9;
+
+        await pool.query(
+            `INSERT INTO short_views (viewer_id, video_id, channel_id, channel_title, category_id, tags, watch_seconds, total_duration, watch_ratio, completed)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [
+                viewerId,
+                videoId,
+                channelId || null,
+                channelTitle || null,
+                categoryId || null,
+                Array.isArray(tags) ? tags.slice(0, 20) : [],
+                watchSeconds,
+                duration,
+                watchRatio,
+                completed
+            ]
+        );
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Erreur lors de l\'enregistrement de la vue Short:', error.message);
+        res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
+initDb().finally(() => {
+    app.listen(PORT, () => {
+        console.log(`Serveur démarré sur le port ${PORT}`);
+    });
 });
