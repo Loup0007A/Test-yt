@@ -28,16 +28,19 @@ if (process.env.DATABASE_URL) {
 async function initDb() {
     if (!pool) return;
     try {
-        // Un "viewer" = un visiteur identifié par empreinte (fingerprint) + IP la plus récente
+        // Un "viewer" = un visiteur identifié par empreinte (fingerprint) + IP la plus récente + pays détecté
         await pool.query(`
             CREATE TABLE IF NOT EXISTS viewers (
                 id SERIAL PRIMARY KEY,
                 fingerprint TEXT UNIQUE NOT NULL,
                 ip TEXT,
+                country_code TEXT,
                 first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
                 last_seen TIMESTAMPTZ NOT NULL DEFAULT now()
             );
         `);
+        // Compatible avec les bases déjà déployées avant l'ajout du géociblage
+        await pool.query(`ALTER TABLE viewers ADD COLUMN IF NOT EXISTS country_code TEXT;`);
         // Chaque ligne = une vidéo Short visionnée par un viewer, avec le temps réel passé dessus
         await pool.query(`
             CREATE TABLE IF NOT EXISTS short_views (
@@ -70,17 +73,48 @@ function getClientIp(req) {
     return req.socket.remoteAddress || '';
 }
 
-// Récupère (ou crée) l'identité d'un viewer à partir de son fingerprint, en notant son IP actuelle.
-// L'identité "primaire" est le fingerprint (stable sur un même appareil/navigateur) ; l'IP est
-// conservée en complément, comme demandé, pour affiner le suivi (repérer un même device sur des IP différentes,
-// ou plusieurs devices derrière la même IP lors des analyses).
-async function getOrCreateViewerId(fingerprint, ip) {
+// ---------- Géolocalisation IP ----------
+// Sert à restreindre le flux de Shorts au pays du visiteur. Résultat mis en cache en mémoire
+// (12h) pour éviter de spammer le service de géolocalisation à chaque requête.
+const geoCache = new Map(); // ip -> { countryCode, country, expiresAt }
+const GEO_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+function isPrivateIp(ip) {
+    if (!ip) return true;
+    return ip === '::1' || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.16.');
+}
+
+async function getCountryForIp(ip) {
+    if (isPrivateIp(ip)) return null;
+    const cached = geoCache.get(ip);
+    if (cached && cached.expiresAt > Date.now()) return cached;
+
+    try {
+        const response = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,countryCode,country`);
+        const data = await response.json();
+        if (data.status !== 'success' || !data.countryCode) return null;
+        const geo = { countryCode: data.countryCode, country: data.country, expiresAt: Date.now() + GEO_CACHE_TTL_MS };
+        geoCache.set(ip, geo);
+        return geo;
+    } catch (error) {
+        console.error('Erreur de géolocalisation IP:', error.message);
+        return null;
+    }
+}
+
+// Récupère (ou crée) l'identité d'un viewer à partir de son fingerprint, en notant son IP et son pays actuels.
+// L'identité "primaire" est le fingerprint (stable sur un même appareil/navigateur) ; l'IP et le pays sont
+// conservés en complément, comme demandé, pour affiner le suivi et le géociblage du flux.
+async function getOrCreateViewerId(fingerprint, ip, countryCode) {
     const { rows } = await pool.query(
-        `INSERT INTO viewers (fingerprint, ip, first_seen, last_seen)
-         VALUES ($1, $2, now(), now())
-         ON CONFLICT (fingerprint) DO UPDATE SET ip = EXCLUDED.ip, last_seen = now()
+        `INSERT INTO viewers (fingerprint, ip, country_code, first_seen, last_seen)
+         VALUES ($1, $2, $3, now(), now())
+         ON CONFLICT (fingerprint) DO UPDATE
+           SET ip = EXCLUDED.ip,
+               country_code = COALESCE(EXCLUDED.country_code, viewers.country_code),
+               last_seen = now()
          RETURNING id`,
-        [fingerprint, ip]
+        [fingerprint, ip, countryCode || null]
     );
     return rows[0].id;
 }
@@ -575,7 +609,10 @@ app.get('/api/shorts', async (req, res) => {
     const ip = getClientIp(req);
 
     try {
-        const profile = fingerprint ? await getViewerProfile(fingerprint, ip) : null;
+        const [profile, geo] = await Promise.all([
+            fingerprint ? getViewerProfile(fingerprint, ip) : Promise.resolve(null),
+            getCountryForIp(ip)
+        ]);
 
         // Requête effective : une recherche explicite de l'utilisateur est toujours respectée telle quelle.
         // En l'absence de recherche, on pioche (70% du temps) dans les mots-clés les mieux "regardés"
@@ -599,6 +636,8 @@ app.get('/api/shorts', async (req, res) => {
             key: apiKey
         });
         if (pageToken) params.set('pageToken', pageToken);
+        // Restreint la recherche à la localisation détectée du visiteur
+        if (geo) params.set('regionCode', geo.countryCode);
 
         const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
 
@@ -634,6 +673,27 @@ app.get('/api/shorts', async (req, res) => {
             };
             const filtered = items.filter(item => item.contentDetails && parseSeconds(item.contentDetails.duration) <= 61);
             if (filtered.length > 0) items = filtered;
+
+            // ---- Filtrage strict par localisation : ne garde que les vidéos dont la chaîne est basée
+            // dans le pays détecté du visiteur. YouTube ne fournit pas de filtre "pays d'origine" direct
+            // sur search.list ; on va donc chercher le pays déclaré de chaque chaîne (channels.list) et on
+            // filtre dessus. Si trop peu de chaînes déclarent un pays (fréquent), on retombe sur la liste
+            // biaisée par regionCode plutôt que de renvoyer un flux vide.
+            if (geo) {
+                try {
+                    const uniqueChannelIds = [...new Set(items.map(item => item.snippet.channelId))];
+                    const channelsData = await fetchJSON(
+                        `${API_BASE}/channels?part=snippet&id=${uniqueChannelIds.join(',')}&key=${apiKey}`
+                    );
+                    const countryMap = {};
+                    channelsData.items.forEach(c => { countryMap[c.id] = c.snippet.country || null; });
+
+                    const localOnly = items.filter(item => countryMap[item.snippet.channelId] === geo.countryCode);
+                    if (localOnly.length > 0) items = localOnly;
+                } catch (error) {
+                    console.error('Erreur lors du filtrage par pays de la chaîne:', error.message);
+                }
+            }
         }
 
         // ---- Reclassement personnalisé ----
@@ -655,7 +715,12 @@ app.get('/api/shorts', async (req, res) => {
             items.sort((a, b) => b._score - a._score);
         }
 
-        res.json({ items, nextPageToken: data.nextPageToken || null, personalized: !!profile });
+        res.json({
+            items,
+            nextPageToken: data.nextPageToken || null,
+            personalized: !!profile,
+            region: geo ? geo.countryCode : null
+        });
     } catch (error) {
         res.status(500).json({ error: "Erreur lors de la récupération des Shorts.", details: error.message });
     }
@@ -676,7 +741,8 @@ app.post('/api/shorts/view', async (req, res) => {
 
     try {
         const ip = getClientIp(req);
-        const viewerId = await getOrCreateViewerId(fingerprint, ip);
+        const geo = await getCountryForIp(ip);
+        const viewerId = await getOrCreateViewerId(fingerprint, ip, geo ? geo.countryCode : null);
 
         const duration = typeof totalDuration === 'number' && totalDuration > 0 ? totalDuration : null;
         const watchRatio = duration ? Math.min(1, watchSeconds / duration) : null;
