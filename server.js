@@ -102,6 +102,71 @@ async function getCountryForIp(ip) {
     }
 }
 
+// ---------- Détection de langue par analyse du texte (titre + description) ----------
+// Le pays déclaré par une chaîne YouTube est très souvent absent (channels.list ne le renvoie
+// pas pour la plupart des petites chaînes). On complète donc la géolocalisation IP par une analyse
+// directe du contenu : on compte les mots-outils (articles, pronoms, prépositions...) de chaque
+// langue présents dans le titre/la description, et on retient la langue la mieux représentée.
+// Volontairement fait à la main (pas de lib externe) pour rester simple, léger et 100% CommonJS.
+const STOPWORDS_BY_LANG = {
+    fr: ['le', 'la', 'les', 'de', 'des', 'un', 'une', 'et', 'est', 'pour', 'avec', 'dans', 'sur', 'pas', 'que', 'qui', 'vous', 'nous', 'il', 'elle', 'ce', 'cette', 'du', 'au', 'aux', 'ne', 'se', 'plus', 'tout', 'comme', 'mais', 'ou', 'son', 'sa', 'être', 'avoir', 'très', 'bien'],
+    en: ['the', 'a', 'an', 'and', 'is', 'for', 'with', 'in', 'on', 'not', 'that', 'who', 'you', 'we', 'he', 'she', 'this', 'of', 'to', 'it', 'are', 'was', 'but', 'or', 'his', 'her', 'have', 'has', 'will', 'your'],
+    es: ['el', 'la', 'los', 'las', 'de', 'un', 'una', 'y', 'es', 'para', 'con', 'en', 'sobre', 'no', 'que', 'quien', 'usted', 'nosotros', 'el', 'ella', 'este', 'esta', 'del', 'al', 'pero', 'o', 'su', 'muy', 'esta'],
+    de: ['der', 'die', 'das', 'ein', 'eine', 'und', 'ist', 'fur', 'mit', 'in', 'auf', 'nicht', 'dass', 'wer', 'sie', 'wir', 'er', 'diese', 'des', 'dem', 'den', 'aber', 'oder', 'sein', 'ihre', 'sehr'],
+    it: ['il', 'lo', 'la', 'i', 'gli', 'le', 'di', 'un', 'una', 'e', 'per', 'con', 'in', 'su', 'non', 'che', 'chi', 'voi', 'noi', 'lui', 'lei', 'questo', 'questa', 'del', 'ma', 'o', 'suo', 'molto'],
+    pt: ['o', 'a', 'os', 'as', 'de', 'um', 'uma', 'e', 'para', 'com', 'em', 'sobre', 'nao', 'que', 'quem', 'voce', 'nos', 'ele', 'ela', 'este', 'esta', 'do', 'da', 'mas', 'ou', 'seu', 'muito']
+};
+
+function stripDiacritics(str) {
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Pré-normalise les mots-outils une seule fois au démarrage
+const STOPWORDS_BY_LANG_NORM = {};
+for (const lang in STOPWORDS_BY_LANG) {
+    STOPWORDS_BY_LANG_NORM[lang] = new Set(STOPWORDS_BY_LANG[lang].map(stripDiacritics));
+}
+
+function detectTextLanguage(text) {
+    if (!text) return null;
+    const words = stripDiacritics(text.toLowerCase()).match(/[a-z]+/g);
+    if (!words || words.length < 5) return null;
+
+    const scores = {};
+    words.forEach(w => {
+        for (const lang in STOPWORDS_BY_LANG_NORM) {
+            if (STOPWORDS_BY_LANG_NORM[lang].has(w)) {
+                scores[lang] = (scores[lang] || 0) + 1;
+            }
+        }
+    });
+
+    let bestLang = null;
+    let bestScore = 0;
+    for (const lang in scores) {
+        if (scores[lang] > bestScore) {
+            bestScore = scores[lang];
+            bestLang = lang;
+        }
+    }
+    // Il faut un minimum de correspondances pour être raisonnablement sûr (évite les faux positifs
+    // sur des textes très courts ou remplis de hashtags/emojis)
+    return bestScore >= 3 ? bestLang : null;
+}
+
+// Langue(s) attendue(s) pour un pays donné (codes ISO 639-1). Sert à confronter la langue détectée
+// du contenu à la langue parlée dans le pays du visiteur.
+const COUNTRY_LANGUAGE_MAP = {
+    FR: ['fr'], BE: ['fr', 'nl'], CH: ['fr', 'de', 'it'], LU: ['fr', 'de'],
+    CA: ['en', 'fr'], US: ['en'], GB: ['en'], IE: ['en'], AU: ['en'], NZ: ['en'],
+    ES: ['es'], MX: ['es'], AR: ['es'], CO: ['es'], CL: ['es'], PE: ['es'], VE: ['es'],
+    DE: ['de'], AT: ['de'],
+    IT: ['it'],
+    PT: ['pt'], BR: ['pt'],
+    NL: ['nl'],
+    MA: ['ar', 'fr'], DZ: ['ar', 'fr'], TN: ['ar', 'fr'], SN: ['fr']
+};
+
 // Récupère (ou crée) l'identité d'un viewer à partir de son fingerprint, en notant son IP et son pays actuels.
 // L'identité "primaire" est le fingerprint (stable sur un même appareil/navigateur) ; l'IP et le pays sont
 // conservés en complément, comme demandé, pour affiner le suivi et le géociblage du flux.
@@ -674,12 +739,28 @@ app.get('/api/shorts', async (req, res) => {
             const filtered = items.filter(item => item.contentDetails && parseSeconds(item.contentDetails.duration) <= 61);
             if (filtered.length > 0) items = filtered;
 
-            // ---- Filtrage strict par localisation : ne garde que les vidéos dont la chaîne est basée
-            // dans le pays détecté du visiteur. YouTube ne fournit pas de filtre "pays d'origine" direct
-            // sur search.list ; on va donc chercher le pays déclaré de chaque chaîne (channels.list) et on
-            // filtre dessus. Si trop peu de chaînes déclarent un pays (fréquent), on retombe sur la liste
-            // biaisée par regionCode plutôt que de renvoyer un flux vide.
+            // ---- Filtrage strict par localisation ----
+            // Deux signaux combinés :
+            // 1) Langue détectée du texte (titre + description) comparée à la langue attendue dans le
+            //    pays du visiteur : c'est le filtre principal, car il s'appuie sur le contenu réel de
+            //    la vidéo et fonctionne même quand la chaîne ne déclare rien.
+            // 2) Pays déclaré par la chaîne (channels.list) : signal secondaire, best-effort, appliqué
+            //    seulement s'il reste assez de résultats après le filtre de langue (affinage, pas une
+            //    nécessité, car ce champ est très souvent absent).
             if (geo) {
+                const expectedLangs = COUNTRY_LANGUAGE_MAP[geo.countryCode] || null;
+
+                if (expectedLangs) {
+                    items.forEach(item => {
+                        const text = `${item.snippet.title || ''}. ${item.snippet.description || ''}`;
+                        item.detectedLanguage = detectTextLanguage(text);
+                    });
+                    const languageFiltered = items.filter(
+                        item => item.detectedLanguage && expectedLangs.includes(item.detectedLanguage)
+                    );
+                    if (languageFiltered.length > 0) items = languageFiltered;
+                }
+
                 try {
                     const uniqueChannelIds = [...new Set(items.map(item => item.snippet.channelId))];
                     const channelsData = await fetchJSON(
@@ -689,7 +770,8 @@ app.get('/api/shorts', async (req, res) => {
                     channelsData.items.forEach(c => { countryMap[c.id] = c.snippet.country || null; });
 
                     const localOnly = items.filter(item => countryMap[item.snippet.channelId] === geo.countryCode);
-                    if (localOnly.length > 0) items = localOnly;
+                    // On n'applique ce filtre plus strict que s'il laisse un volume de contenu suffisant
+                    if (localOnly.length >= 5) items = localOnly;
                 } catch (error) {
                     console.error('Erreur lors du filtrage par pays de la chaîne:', error.message);
                 }
