@@ -2046,9 +2046,11 @@
                             // Démarre le chronométrage du temps de visionnage pour cette vidéo
                             el.dataset.watchStart = Date.now().toString();
                         }
-                        // Charge la page suivante quand on approche de la fin du flux
-                        const allItems = document.querySelectorAll('#shorts-feed .short-item');
-                        if (allItems.length >= 3 && el === allItems[allItems.length - 3] && shortsPageToken) {
+                        // Charge la page suivante quand on approche de la fin du flux (fonctionne même
+                        // s'il reste très peu d'éléments, contrairement à une comparaison stricte au 3e avant la fin)
+                        const allItems = Array.from(document.querySelectorAll('#shorts-feed .short-item'));
+                        const idx = allItems.indexOf(el);
+                        if (idx !== -1 && idx >= allItems.length - 3 && shortsPageToken) {
                             loadShorts(true);
                         }
                     } else {
