@@ -128,9 +128,9 @@ for (const lang in STOPWORDS_BY_LANG) {
 }
 
 function detectTextLanguage(text) {
-    if (!text) return null;
+    if (!text) return { lang: null, confidence: 0 };
     const words = stripDiacritics(text.toLowerCase()).match(/[a-z]+/g);
-    if (!words || words.length < 5) return null;
+    if (!words || words.length < 5) return { lang: null, confidence: 0 };
 
     const scores = {};
     words.forEach(w => {
@@ -151,7 +151,11 @@ function detectTextLanguage(text) {
     }
     // Il faut un minimum de correspondances pour être raisonnablement sûr (évite les faux positifs
     // sur des textes très courts ou remplis de hashtags/emojis)
-    return bestScore >= 3 ? bestLang : null;
+    if (bestScore < 3) return { lang: null, confidence: 0 };
+    // Confiance normalisée (0-1) : au-delà de ~12 correspondances de mots-outils, on considère
+    // la confiance maximale.
+    const confidence = Math.min(1, bestScore / 12);
+    return { lang: bestLang, confidence };
 }
 
 // Langue(s) attendue(s) pour un pays donné (codes ISO 639-1). Sert à confronter la langue détectée
@@ -664,14 +668,136 @@ app.get('/api/related', async (req, res) => {
  * (chaînes/mots-clés les mieux "regardés"), puis reclassement des résultats en
  * favorisant les chaînes appréciées et en dépriorisant les vidéos déjà vues.
  */
+function chunkArray(arr, size) {
+    const chunks = [];
+    for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+    return chunks;
+}
+
+async function fetchVideosBatch(ids, apiKey) {
+    const merged = [];
+    for (const chunk of chunkArray(ids, 50)) {
+        const data = await fetchJSON(`${API_BASE}/videos?part=statistics,contentDetails,snippet&id=${chunk.join(',')}&key=${apiKey}`);
+        merged.push(...data.items);
+    }
+    return merged;
+}
+
+async function fetchChannelsBatch(ids, apiKey, part) {
+    const merged = [];
+    for (const chunk of chunkArray(ids, 50)) {
+        const data = await fetchJSON(`${API_BASE}/channels?part=${part}&id=${chunk.join(',')}&key=${apiKey}`);
+        merged.push(...data.items);
+    }
+    return merged;
+}
+
+function parseIsoDurationSeconds(iso) {
+    if (!iso) return Infinity;
+    const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return Infinity;
+    const h = parseInt(m[1] || '0', 10);
+    const mi = parseInt(m[2] || '0', 10);
+    const s = parseInt(m[3] || '0', 10);
+    return h * 3600 + mi * 60 + s;
+}
+
+/**
+ * Système de points multi-critères pour classer les Shorts. Chaque critère a une échelle de points
+ * dédiée (comme demandé), pensée pour que le volume de vues seul ne puisse jamais écraser les autres
+ * signaux — c'est ce qui permet aux petites chaînes de remonter quand le reste (langue, engagement,
+ * ressemblance avec ce que le viewer aime) est bon.
+ */
+function computeShortScore(item, { expectedLangs, profile }) {
+    const breakdown = {};
+    let score = 0;
+
+    // 1) Fiabilité de la langue détectée (1 à 100 points) — le plus gros poids du système, car c'est
+    //    le critère le plus déterminant pour la pertinence "localisation" demandée.
+    let langScore;
+    if (!item.detectedLanguage) {
+        langScore = 15; // langue indéterminable : score bas mais non nul
+    } else if (!expectedLangs) {
+        langScore = Math.round(40 + item.languageConfidence * 40); // pas de pays connu : on récompense la confiance seule
+    } else if (expectedLangs.includes(item.detectedLanguage)) {
+        langScore = Math.round(50 + item.languageConfidence * 50); // correspond à la langue du visiteur
+    } else {
+        langScore = Math.round(10 + item.languageConfidence * 15); // langue différente de celle attendue
+    }
+    breakdown.language = Math.min(100, Math.max(1, langScore));
+    score += breakdown.language;
+
+    const views = parseInt((item.statistics && item.statistics.viewCount) || '0', 10);
+    const likes = parseInt((item.statistics && item.statistics.likeCount) || '0', 10);
+    const comments = parseInt((item.statistics && item.statistics.commentCount) || '0', 10);
+
+    // 2) Ratio likes / vues (1 à 10 points) — mesure l'engagement réel, indépendamment du volume brut.
+    const likeRatio = views > 0 ? likes / views : 0;
+    breakdown.likeRatio = Math.min(10, Math.max(1, Math.round(likeRatio * 400)));
+    score += breakdown.likeRatio;
+
+    // 3) Volume de vues (1 à 5 points seulement) — volontairement plafonné très bas, en échelle
+    //    logarithmique, pour qu'une vidéo virale n'écrase pas structurellement les petites chaînes.
+    breakdown.views = Math.min(5, Math.max(1, Math.round(Math.log10(views + 10))));
+    score += breakdown.views;
+
+    // 4) Ressemblance avec les vidéos que le viewer a le plus appréciées, d'après son historique
+    //    (tags en commun + même chaîne qu'une vidéo très regardée) (1 à 50 points).
+    let similarity = 1;
+    if (profile) {
+        const tagOverlap = (item.tags || []).filter(t => profile.topKeywords.includes(t)).length;
+        const tagScore = Math.min(35, tagOverlap * 12);
+        const isFavoriteChannel = profile.topChannels.some(c => c.channel_id === item.snippet.channelId);
+        const channelScore = isFavoriteChannel ? 15 : 0;
+        similarity = Math.min(50, Math.max(1, tagScore + channelScore));
+    }
+    breakdown.similarity = similarity;
+    score += similarity;
+
+    // 5) Bonus "petite chaîne" (0 à 15 points) — inversement proportionnel au nombre d'abonnés,
+    //    en échelle logarithmique. C'est le levier explicite de mise en avant des petits créateurs.
+    let smallChannelScore = 6; // neutre si le nombre d'abonnés est inconnu/masqué
+    if (typeof item.channelSubscribers === 'number' && item.channelSubscribers >= 0) {
+        smallChannelScore = Math.min(15, Math.max(0, Math.round(15 - Math.log10(item.channelSubscribers + 10) * 2.2)));
+    }
+    breakdown.smallChannel = smallChannelScore;
+    score += smallChannelScore;
+
+    // 6) Fraîcheur de publication (0 à 10 points) — légère préférence pour du contenu récent,
+    //    dégressive sur ~450 jours.
+    let freshness = 5;
+    if (item.snippet.publishedAt) {
+        const daysSince = (Date.now() - new Date(item.snippet.publishedAt).getTime()) / (1000 * 60 * 60 * 24);
+        freshness = Math.min(10, Math.max(0, Math.round(10 - daysSince / 45)));
+    }
+    breakdown.freshness = freshness;
+    score += freshness;
+
+    // 7) Ratio commentaires / vues (0 à 5 points) — engagement complémentaire aux likes, capte les
+    //    vidéos qui suscitent de la discussion même sans être massivement vues.
+    const commentRatio = views > 0 ? comments / views : 0;
+    breakdown.comments = Math.min(5, Math.max(0, Math.round(commentRatio * 2000)));
+    score += breakdown.comments;
+
+    item._scoreBreakdown = breakdown;
+    return score;
+}
+
 app.get('/api/shorts', async (req, res) => {
     const apiKey = getApiKey(res);
     if (!apiKey) return;
 
     const userQuery = (req.query.q || '').trim();
-    const pageToken = req.query.pageToken;
+    const incomingPageToken = req.query.pageToken || undefined;
     const fingerprint = req.query.fp || null;
     const ip = getClientIp(req);
+
+    // Fetch multi-pages borné : le filtrage (durée réelle, langue, pays) peut éliminer une grosse
+    // partie de chaque page YouTube. Sans ça, une page de 20 résultats pouvait ne laisser que 1 ou 2
+    // Shorts après filtrage, et le défilement infini n'avait plus rien à charger. On accumule donc
+    // plusieurs pages brutes avant de filtrer/scorer, pour garantir un lot exploitable à chaque appel.
+    const MAX_SEARCH_PAGES = 4;
+    const RAW_POOL_TARGET = 45;
 
     try {
         const [profile, geo] = await Promise.all([
@@ -685,36 +811,53 @@ app.get('/api/shorts', async (req, res) => {
         let effectiveQuery = userQuery;
         let order = userQuery ? 'relevance' : 'viewCount';
         if (!userQuery && profile && profile.topKeywords.length > 0 && Math.random() < 0.7) {
-            const pool3 = profile.topKeywords.slice(0, 3);
-            effectiveQuery = pool3[Math.floor(Math.random() * pool3.length)];
+            const keywordPool = profile.topKeywords.slice(0, 3);
+            effectiveQuery = keywordPool[Math.floor(Math.random() * keywordPool.length)];
             order = 'relevance';
         }
         if (!effectiveQuery) effectiveQuery = 'shorts';
 
-        const params = new URLSearchParams({
-            part: 'snippet',
-            q: effectiveQuery,
-            type: 'video',
-            videoDuration: 'short',
-            order,
-            maxResults: '20',
-            key: apiKey
-        });
-        if (pageToken) params.set('pageToken', pageToken);
-        // Restreint la recherche à la localisation détectée du visiteur
-        if (geo) params.set('regionCode', geo.countryCode);
+        // ---- 1) Accumulation d'un pool brut sur plusieurs pages YouTube ----
+        const rawItems = [];
+        const seenIds = new Set();
+        let cursor = incomingPageToken;
+        let nextPageTokenForClient = null;
 
-        const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
+        for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
+            const params = new URLSearchParams({
+                part: 'snippet',
+                q: effectiveQuery,
+                type: 'video',
+                videoDuration: 'short',
+                order,
+                maxResults: '50',
+                key: apiKey
+            });
+            if (cursor) params.set('pageToken', cursor);
+            if (geo) params.set('regionCode', geo.countryCode);
 
-        const videoIds = data.items.map(item => item.id.videoId).filter(Boolean);
-        let items = data.items;
+            const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
+            data.items.forEach(item => {
+                const vId = item.id.videoId;
+                if (vId && !seenIds.has(vId)) {
+                    seenIds.add(vId);
+                    rawItems.push(item);
+                }
+            });
 
+            nextPageTokenForClient = data.nextPageToken || null;
+            cursor = data.nextPageToken;
+            if (!cursor || rawItems.length >= RAW_POOL_TARGET) break;
+        }
+
+        let items = rawItems;
+
+        // ---- 2) Enrichissement (stats, durée, tags, catégorie) ----
+        const videoIds = items.map(item => item.id.videoId).filter(Boolean);
         if (videoIds.length > 0) {
-            const statsData = await fetchJSON(
-                `${API_BASE}/videos?part=statistics,contentDetails,snippet&id=${videoIds.join(',')}&key=${apiKey}`
-            );
+            const videosData = await fetchVideosBatch(videoIds, apiKey);
             const statsMap = {};
-            statsData.items.forEach(v => { statsMap[v.id] = v; });
+            videosData.forEach(v => { statsMap[v.id] = v; });
             items.forEach(item => {
                 const extra = statsMap[item.id.videoId];
                 if (extra) {
@@ -725,71 +868,54 @@ app.get('/api/shorts', async (req, res) => {
                 }
             });
 
-            // Ne garde que les vidéos réellement courtes (<= 61s). Si le filtre élimine
-            // tout (résultats atypiques), on retombe sur la liste non filtrée.
-            const parseSeconds = (iso) => {
-                if (!iso) return Infinity;
-                const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-                if (!m) return Infinity;
-                const h = parseInt(m[1] || '0', 10);
-                const mi = parseInt(m[2] || '0', 10);
-                const s = parseInt(m[3] || '0', 10);
-                return h * 3600 + mi * 60 + s;
-            };
-            const filtered = items.filter(item => item.contentDetails && parseSeconds(item.contentDetails.duration) <= 61);
-            if (filtered.length > 0) items = filtered;
+            // Ne garde que les vidéos réellement courtes (<= 61s)
+            const durationFiltered = items.filter(item => item.contentDetails && parseIsoDurationSeconds(item.contentDetails.duration) <= 61);
+            if (durationFiltered.length > 0) items = durationFiltered;
 
-            // ---- Filtrage strict par localisation ----
-            // Deux signaux combinés :
-            // 1) Langue détectée du texte (titre + description) comparée à la langue attendue dans le
-            //    pays du visiteur : c'est le filtre principal, car il s'appuie sur le contenu réel de
-            //    la vidéo et fonctionne même quand la chaîne ne déclare rien.
-            // 2) Pays déclaré par la chaîne (channels.list) : signal secondaire, best-effort, appliqué
-            //    seulement s'il reste assez de résultats après le filtre de langue (affinage, pas une
-            //    nécessité, car ce champ est très souvent absent).
-            if (geo) {
-                const expectedLangs = COUNTRY_LANGUAGE_MAP[geo.countryCode] || null;
+            // Détecte la langue de chaque vidéo (utile au filtrage ET au scoring, même sans géo connue)
+            items.forEach(item => {
+                const text = `${item.snippet.title || ''}. ${item.snippet.description || ''}`;
+                const langResult = detectTextLanguage(text);
+                item.detectedLanguage = langResult.lang;
+                item.languageConfidence = langResult.confidence;
+            });
 
-                if (expectedLangs) {
-                    items.forEach(item => {
-                        const text = `${item.snippet.title || ''}. ${item.snippet.description || ''}`;
-                        item.detectedLanguage = detectTextLanguage(text);
-                    });
-                    const languageFiltered = items.filter(
-                        item => item.detectedLanguage && expectedLangs.includes(item.detectedLanguage)
-                    );
-                    if (languageFiltered.length > 0) items = languageFiltered;
-                }
+            const expectedLangs = geo ? (COUNTRY_LANGUAGE_MAP[geo.countryCode] || null) : null;
 
-                try {
-                    const uniqueChannelIds = [...new Set(items.map(item => item.snippet.channelId))];
-                    const channelsData = await fetchJSON(
-                        `${API_BASE}/channels?part=snippet&id=${uniqueChannelIds.join(',')}&key=${apiKey}`
-                    );
-                    const countryMap = {};
-                    channelsData.items.forEach(c => { countryMap[c.id] = c.snippet.country || null; });
+            // ---- 3) Filtrage strict par localisation (langue en priorité, pays de chaîne en affinage) ----
+            if (expectedLangs) {
+                const languageFiltered = items.filter(
+                    item => item.detectedLanguage && expectedLangs.includes(item.detectedLanguage)
+                );
+                if (languageFiltered.length > 0) items = languageFiltered;
+            }
 
+            // Récupère aussi le nombre d'abonnés (nécessaire au bonus "petite chaîne" du scoring),
+            // et le pays de la chaîne quand une géolocalisation est disponible (affinage best-effort).
+            try {
+                const uniqueChannelIds = [...new Set(items.map(item => item.snippet.channelId))];
+                const channelsData = await fetchChannelsBatch(uniqueChannelIds, apiKey, geo ? 'snippet,statistics' : 'statistics');
+                const countryMap = {};
+                const subsMap = {};
+                channelsData.forEach(c => {
+                    if (geo) countryMap[c.id] = c.snippet.country || null;
+                    subsMap[c.id] = (c.statistics && !c.statistics.hiddenSubscriberCount) ? parseInt(c.statistics.subscriberCount, 10) : null;
+                });
+                items.forEach(item => { item.channelSubscribers = subsMap[item.snippet.channelId] ?? null; });
+
+                if (geo) {
                     const localOnly = items.filter(item => countryMap[item.snippet.channelId] === geo.countryCode);
                     // On n'applique ce filtre plus strict que s'il laisse un volume de contenu suffisant
                     if (localOnly.length >= 5) items = localOnly;
-                } catch (error) {
-                    console.error('Erreur lors du filtrage par pays de la chaîne:', error.message);
                 }
+            } catch (error) {
+                console.error('Erreur lors de la récupération des infos de chaîne:', error.message);
             }
-        }
 
-        // ---- Reclassement personnalisé ----
-        if (profile) {
-            const channelBoost = new Map(
-                profile.topChannels.map(c => [c.channel_id, parseFloat(c.avg_ratio) * Math.log(1 + parseInt(c.n, 10))])
-            );
-            items.forEach((item, idx) => {
-                let score = items.length - idx; // pertinence de base = ordre renvoyé par YouTube
-                const chId = item.snippet.channelId;
-                if (channelBoost.has(chId)) {
-                    score += channelBoost.get(chId) * 20; // forte préférence pour les chaînes appréciées
-                }
-                if (profile.seenVideoIds.has(item.id.videoId)) {
+            // ---- 4) Classement par système de points multi-critères ----
+            items.forEach(item => {
+                let score = computeShortScore(item, { expectedLangs, profile });
+                if (profile && profile.seenVideoIds.has(item.id.videoId)) {
                     score -= 1000; // fortement dépriorisé (pas exclu) si déjà vu récemment
                 }
                 item._score = score;
@@ -799,7 +925,7 @@ app.get('/api/shorts', async (req, res) => {
 
         res.json({
             items,
-            nextPageToken: data.nextPageToken || null,
+            nextPageToken: nextPageTokenForClient,
             personalized: !!profile,
             region: geo ? geo.countryCode : null
         });
