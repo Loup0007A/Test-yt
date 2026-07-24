@@ -188,8 +188,15 @@ async function getOrCreateViewerId(fingerprint, ip, countryCode) {
     return rows[0].id;
 }
 
+// Seuils de détection d'un "skip" (vidéo quittée quasi immédiatement) : réutilisés partout
+// où l'historique de visionnage est consulté (Shorts, recommandations vidéos, recommandations musique).
+const SKIP_SECONDS_THRESHOLD = 3;
+const SKIP_RATIO_THRESHOLD = 0.15;
+
 // Construit le profil d'affinité d'un viewer à partir de son historique de visionnage :
 // - les vidéos déjà vues récemment (pour éviter les répétitions)
+// - les vidéos explicitement "skip" (quittées en 3s ou moins, ou avec un ratio de visionnage très
+//   faible) lors de leur dernier visionnage : critère négatif fort, réutilisé partout
 // - les chaînes qu'il regarde le plus longtemps / le plus souvent (score = ratio moyen de visionnage x volume)
 // - les mots-clés (tags) associés aux vidéos qu'il regarde le plus
 async function getViewerProfile(fingerprint, ip) {
@@ -200,10 +207,23 @@ async function getViewerProfile(fingerprint, ip) {
         const viewerId = viewerRes.rows[0].id;
 
         const seenRes = await pool.query(
-            `SELECT video_id FROM short_views WHERE viewer_id = $1 ORDER BY created_at DESC LIMIT 200`,
+            `SELECT video_id, watch_seconds, watch_ratio FROM short_views WHERE viewer_id = $1 ORDER BY created_at DESC LIMIT 300`,
             [viewerId]
         );
-        const seenVideoIds = new Set(seenRes.rows.map(r => r.video_id));
+        const seenVideoIds = new Set();
+        const skippedVideoIds = new Set();
+        const consideredForSkip = new Set();
+        seenRes.rows.forEach(r => {
+            seenVideoIds.add(r.video_id);
+            // On ne considère que le visionnage le plus récent de chaque vidéo pour statuer sur le skip
+            // (les lignes sont déjà triées du plus récent au plus ancien)
+            if (consideredForSkip.has(r.video_id)) return;
+            consideredForSkip.add(r.video_id);
+            const watchSeconds = parseFloat(r.watch_seconds);
+            const watchRatio = r.watch_ratio !== null ? parseFloat(r.watch_ratio) : null;
+            const isSkip = watchSeconds <= SKIP_SECONDS_THRESHOLD || (watchRatio !== null && watchRatio < SKIP_RATIO_THRESHOLD);
+            if (isSkip) skippedVideoIds.add(r.video_id);
+        });
 
         const channelRes = await pool.query(
             `SELECT channel_id, channel_title, AVG(watch_ratio) AS avg_ratio, COUNT(*) AS n
@@ -228,6 +248,7 @@ async function getViewerProfile(fingerprint, ip) {
         return {
             viewerId,
             seenVideoIds,
+            skippedVideoIds,
             topChannels: channelRes.rows,
             topKeywords: keywordRes.rows.map(r => r.tag)
         };
@@ -703,12 +724,22 @@ function parseIsoDurationSeconds(iso) {
 }
 
 /**
- * Système de points multi-critères pour classer les Shorts. Chaque critère a une échelle de points
- * dédiée (comme demandé), pensée pour que le volume de vues seul ne puisse jamais écraser les autres
- * signaux — c'est ce qui permet aux petites chaînes de remonter quand le reste (langue, engagement,
- * ressemblance avec ce que le viewer aime) est bon.
+ * Système de points multi-critères pour classer Shorts, vidéos normales ET musique. Chaque critère a
+ * une échelle de points dédiée, pensée pour que le volume de vues seul ne puisse jamais écraser les
+ * autres signaux — c'est ce qui permet aux petites chaînes de remonter quand le reste (langue,
+ * engagement, ressemblance avec ce que le viewer aime) est bon.
+ *
+ * Critère négatif : si le viewer a déjà "skip" cette vidéo précédemment (voir SKIP_SECONDS_THRESHOLD /
+ * SKIP_RATIO_THRESHOLD dans getViewerProfile), le score total est ramené à 0, quels que soient les
+ * autres critères — on ne lui redonne pas sa chance tant qu'il n'y a pas de nouveau signal positif.
  */
-function computeShortScore(item, { expectedLangs, profile }) {
+function computeContentScore(item, { expectedLangs, profile }) {
+    // Critère négatif prioritaire : vidéo déjà skip par ce viewer -> score total nul
+    if (profile && profile.skippedVideoIds && profile.skippedVideoIds.has(item.id.videoId)) {
+        item._scoreBreakdown = { skipped: true };
+        return 0;
+    }
+
     const breakdown = {};
     let score = 0;
 
@@ -783,21 +814,128 @@ function computeShortScore(item, { expectedLangs, profile }) {
     return score;
 }
 
+/**
+ * Construit un flux de vidéos scoré et filtré par localisation, partagé par /api/shorts et
+ * /api/recommendations (vidéos normales + musique). Centralise : accumulation multi-pages
+ * (pour ne jamais tomber à sec après filtrage), enrichissement stats/tags/langue/abonnés,
+ * filtrage localisation, et classement par système de points.
+ */
+async function fetchScoredFeed({ apiKey, query, order, geo, profile, pageToken, shortsOnly, videoCategoryId }) {
+    const MAX_SEARCH_PAGES = shortsOnly ? 4 : 3;
+    const RAW_POOL_TARGET = shortsOnly ? 45 : 40;
+
+    const rawItems = [];
+    const seenIds = new Set();
+    let cursor = pageToken;
+    let nextPageTokenForClient = null;
+
+    for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
+        const params = new URLSearchParams({
+            part: 'snippet',
+            q: query,
+            type: 'video',
+            order,
+            maxResults: '50',
+            key: apiKey
+        });
+        if (shortsOnly) params.set('videoDuration', 'short');
+        if (videoCategoryId) params.set('videoCategoryId', videoCategoryId);
+        if (cursor) params.set('pageToken', cursor);
+        if (geo) params.set('regionCode', geo.countryCode);
+
+        const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
+        data.items.forEach(item => {
+            const vId = item.id.videoId;
+            if (vId && !seenIds.has(vId)) {
+                seenIds.add(vId);
+                rawItems.push(item);
+            }
+        });
+
+        nextPageTokenForClient = data.nextPageToken || null;
+        cursor = data.nextPageToken;
+        if (!cursor || rawItems.length >= RAW_POOL_TARGET) break;
+    }
+
+    let items = rawItems;
+    const videoIds = items.map(item => item.id.videoId).filter(Boolean);
+    if (videoIds.length === 0) return { items: [], nextPageToken: nextPageTokenForClient };
+
+    const videosData = await fetchVideosBatch(videoIds, apiKey);
+    const statsMap = {};
+    videosData.forEach(v => { statsMap[v.id] = v; });
+    items.forEach(item => {
+        const extra = statsMap[item.id.videoId];
+        if (extra) {
+            item.statistics = extra.statistics;
+            item.contentDetails = extra.contentDetails;
+            item.tags = extra.snippet.tags || [];
+            item.categoryId = extra.snippet.categoryId || null;
+        }
+    });
+
+    if (shortsOnly) {
+        const durationFiltered = items.filter(item => item.contentDetails && parseIsoDurationSeconds(item.contentDetails.duration) <= 61);
+        if (durationFiltered.length > 0) items = durationFiltered;
+    }
+
+    // Détecte la langue de chaque vidéo (utile au filtrage ET au scoring, même sans géo connue)
+    items.forEach(item => {
+        const text = `${item.snippet.title || ''}. ${item.snippet.description || ''}`;
+        const langResult = detectTextLanguage(text);
+        item.detectedLanguage = langResult.lang;
+        item.languageConfidence = langResult.confidence;
+    });
+
+    const expectedLangs = geo ? (COUNTRY_LANGUAGE_MAP[geo.countryCode] || null) : null;
+    if (expectedLangs) {
+        const languageFiltered = items.filter(
+            item => item.detectedLanguage && expectedLangs.includes(item.detectedLanguage)
+        );
+        if (languageFiltered.length > 0) items = languageFiltered;
+    }
+
+    // Nombre d'abonnés (bonus "petite chaîne") + pays de la chaîne (affinage localisation best-effort)
+    try {
+        const uniqueChannelIds = [...new Set(items.map(item => item.snippet.channelId))];
+        const channelsData = await fetchChannelsBatch(uniqueChannelIds, apiKey, geo ? 'snippet,statistics' : 'statistics');
+        const countryMap = {};
+        const subsMap = {};
+        channelsData.forEach(c => {
+            if (geo) countryMap[c.id] = c.snippet.country || null;
+            subsMap[c.id] = (c.statistics && !c.statistics.hiddenSubscriberCount) ? parseInt(c.statistics.subscriberCount, 10) : null;
+        });
+        items.forEach(item => { item.channelSubscribers = subsMap[item.snippet.channelId] ?? null; });
+
+        if (geo) {
+            const localOnly = items.filter(item => countryMap[item.snippet.channelId] === geo.countryCode);
+            if (localOnly.length >= 5) items = localOnly;
+        }
+    } catch (error) {
+        console.error('Erreur lors de la récupération des infos de chaîne:', error.message);
+    }
+
+    // ---- Classement par système de points ----
+    items.forEach(item => {
+        let score = computeContentScore(item, { expectedLangs, profile });
+        if (profile && !profile.skippedVideoIds.has(item.id.videoId) && profile.seenVideoIds.has(item.id.videoId)) {
+            score -= 1000; // déjà vue (mais pas skip) : fortement dépriorisée pour éviter les répétitions
+        }
+        item._score = score;
+    });
+    items.sort((a, b) => b._score - a._score);
+
+    return { items, nextPageToken: nextPageTokenForClient };
+}
+
 app.get('/api/shorts', async (req, res) => {
     const apiKey = getApiKey(res);
     if (!apiKey) return;
 
     const userQuery = (req.query.q || '').trim();
-    const incomingPageToken = req.query.pageToken || undefined;
+    const pageToken = req.query.pageToken || undefined;
     const fingerprint = req.query.fp || null;
     const ip = getClientIp(req);
-
-    // Fetch multi-pages borné : le filtrage (durée réelle, langue, pays) peut éliminer une grosse
-    // partie de chaque page YouTube. Sans ça, une page de 20 résultats pouvait ne laisser que 1 ou 2
-    // Shorts après filtrage, et le défilement infini n'avait plus rien à charger. On accumule donc
-    // plusieurs pages brutes avant de filtrer/scorer, pour garantir un lot exploitable à chaque appel.
-    const MAX_SEARCH_PAGES = 4;
-    const RAW_POOL_TARGET = 45;
 
     try {
         const [profile, geo] = await Promise.all([
@@ -817,120 +955,75 @@ app.get('/api/shorts', async (req, res) => {
         }
         if (!effectiveQuery) effectiveQuery = 'shorts';
 
-        // ---- 1) Accumulation d'un pool brut sur plusieurs pages YouTube ----
-        const rawItems = [];
-        const seenIds = new Set();
-        let cursor = incomingPageToken;
-        let nextPageTokenForClient = null;
-
-        for (let page = 0; page < MAX_SEARCH_PAGES; page++) {
-            const params = new URLSearchParams({
-                part: 'snippet',
-                q: effectiveQuery,
-                type: 'video',
-                videoDuration: 'short',
-                order,
-                maxResults: '50',
-                key: apiKey
-            });
-            if (cursor) params.set('pageToken', cursor);
-            if (geo) params.set('regionCode', geo.countryCode);
-
-            const data = await fetchJSON(`${API_BASE}/search?${params.toString()}`);
-            data.items.forEach(item => {
-                const vId = item.id.videoId;
-                if (vId && !seenIds.has(vId)) {
-                    seenIds.add(vId);
-                    rawItems.push(item);
-                }
-            });
-
-            nextPageTokenForClient = data.nextPageToken || null;
-            cursor = data.nextPageToken;
-            if (!cursor || rawItems.length >= RAW_POOL_TARGET) break;
-        }
-
-        let items = rawItems;
-
-        // ---- 2) Enrichissement (stats, durée, tags, catégorie) ----
-        const videoIds = items.map(item => item.id.videoId).filter(Boolean);
-        if (videoIds.length > 0) {
-            const videosData = await fetchVideosBatch(videoIds, apiKey);
-            const statsMap = {};
-            videosData.forEach(v => { statsMap[v.id] = v; });
-            items.forEach(item => {
-                const extra = statsMap[item.id.videoId];
-                if (extra) {
-                    item.statistics = extra.statistics;
-                    item.contentDetails = extra.contentDetails;
-                    item.tags = extra.snippet.tags || [];
-                    item.categoryId = extra.snippet.categoryId || null;
-                }
-            });
-
-            // Ne garde que les vidéos réellement courtes (<= 61s)
-            const durationFiltered = items.filter(item => item.contentDetails && parseIsoDurationSeconds(item.contentDetails.duration) <= 61);
-            if (durationFiltered.length > 0) items = durationFiltered;
-
-            // Détecte la langue de chaque vidéo (utile au filtrage ET au scoring, même sans géo connue)
-            items.forEach(item => {
-                const text = `${item.snippet.title || ''}. ${item.snippet.description || ''}`;
-                const langResult = detectTextLanguage(text);
-                item.detectedLanguage = langResult.lang;
-                item.languageConfidence = langResult.confidence;
-            });
-
-            const expectedLangs = geo ? (COUNTRY_LANGUAGE_MAP[geo.countryCode] || null) : null;
-
-            // ---- 3) Filtrage strict par localisation (langue en priorité, pays de chaîne en affinage) ----
-            if (expectedLangs) {
-                const languageFiltered = items.filter(
-                    item => item.detectedLanguage && expectedLangs.includes(item.detectedLanguage)
-                );
-                if (languageFiltered.length > 0) items = languageFiltered;
-            }
-
-            // Récupère aussi le nombre d'abonnés (nécessaire au bonus "petite chaîne" du scoring),
-            // et le pays de la chaîne quand une géolocalisation est disponible (affinage best-effort).
-            try {
-                const uniqueChannelIds = [...new Set(items.map(item => item.snippet.channelId))];
-                const channelsData = await fetchChannelsBatch(uniqueChannelIds, apiKey, geo ? 'snippet,statistics' : 'statistics');
-                const countryMap = {};
-                const subsMap = {};
-                channelsData.forEach(c => {
-                    if (geo) countryMap[c.id] = c.snippet.country || null;
-                    subsMap[c.id] = (c.statistics && !c.statistics.hiddenSubscriberCount) ? parseInt(c.statistics.subscriberCount, 10) : null;
-                });
-                items.forEach(item => { item.channelSubscribers = subsMap[item.snippet.channelId] ?? null; });
-
-                if (geo) {
-                    const localOnly = items.filter(item => countryMap[item.snippet.channelId] === geo.countryCode);
-                    // On n'applique ce filtre plus strict que s'il laisse un volume de contenu suffisant
-                    if (localOnly.length >= 5) items = localOnly;
-                }
-            } catch (error) {
-                console.error('Erreur lors de la récupération des infos de chaîne:', error.message);
-            }
-
-            // ---- 4) Classement par système de points multi-critères ----
-            items.forEach(item => {
-                let score = computeShortScore(item, { expectedLangs, profile });
-                if (profile && profile.seenVideoIds.has(item.id.videoId)) {
-                    score -= 1000; // fortement dépriorisé (pas exclu) si déjà vu récemment
-                }
-                item._score = score;
-            });
-            items.sort((a, b) => b._score - a._score);
-        }
+        const { items, nextPageToken } = await fetchScoredFeed({
+            apiKey, query: effectiveQuery, order, geo, profile, pageToken, shortsOnly: true
+        });
 
         res.json({
             items,
-            nextPageToken: nextPageTokenForClient,
+            nextPageToken,
             personalized: !!profile,
             region: geo ? geo.countryCode : null
         });
     } catch (error) {
         res.status(500).json({ error: "Erreur lors de la récupération des Shorts.", details: error.message });
+    }
+});
+
+/**
+ * GET /api/recommendations?fp=&music=true|false&pageToken=
+ * Recommandations personnalisées de vidéos normales (music=false) ou de musique (music=true),
+ * affichées sous la barre de recherche. Réutilise le même moteur de scoring que les Shorts
+ * (localisation par langue, engagement, ressemblance avec l'historique, bonus petites chaînes,
+ * pénalité si déjà skip) — pas de contrainte de durée courte ici, contrairement aux Shorts.
+ */
+app.get('/api/recommendations', async (req, res) => {
+    const apiKey = getApiKey(res);
+    if (!apiKey) return;
+
+    const musicOnly = req.query.music === 'true';
+    const pageToken = req.query.pageToken || undefined;
+    const fingerprint = req.query.fp || null;
+    const ip = getClientIp(req);
+
+    try {
+        const [profile, geo] = await Promise.all([
+            fingerprint ? getViewerProfile(fingerprint, ip) : Promise.resolve(null),
+            getCountryForIp(ip)
+        ]);
+
+        // Sans historique, on part sur une requête de découverte générique ; avec historique,
+        // on pioche dans les mots-clés les mieux "regardés" du profil.
+        let query;
+        let order;
+        if (profile && profile.topKeywords.length > 0) {
+            const keywordPool = profile.topKeywords.slice(0, 5);
+            query = keywordPool[Math.floor(Math.random() * keywordPool.length)];
+            order = 'relevance';
+        } else {
+            query = musicOnly ? 'musique' : 'tendances';
+            order = 'viewCount';
+        }
+
+        const { items, nextPageToken } = await fetchScoredFeed({
+            apiKey,
+            query,
+            order,
+            geo,
+            profile,
+            pageToken,
+            shortsOnly: false,
+            videoCategoryId: musicOnly ? '10' : null
+        });
+
+        res.json({
+            items: items.slice(0, 20),
+            nextPageToken,
+            personalized: !!profile,
+            region: geo ? geo.countryCode : null
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Erreur lors de la génération des recommandations.", details: error.message });
     }
 });
 
